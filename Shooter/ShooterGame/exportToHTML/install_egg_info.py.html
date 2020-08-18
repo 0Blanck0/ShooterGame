@@ -1,0 +1,83 @@
+<html>
+<head>
+<title>install_egg_info.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+install_egg_info.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">distutils </span><span class="s0">import </span><span class="s1">log</span><span class="s0">, </span><span class="s1">dir_util</span>
+<span class="s0">import </span><span class="s1">os</span>
+
+<span class="s0">from </span><span class="s1">setuptools </span><span class="s0">import </span><span class="s1">Command</span>
+<span class="s0">from </span><span class="s1">setuptools </span><span class="s0">import </span><span class="s1">namespaces</span>
+<span class="s0">from </span><span class="s1">setuptools.archive_util </span><span class="s0">import </span><span class="s1">unpack_archive</span>
+<span class="s0">import </span><span class="s1">pkg_resources</span>
+
+
+<span class="s0">class </span><span class="s1">install_egg_info(namespaces.Installer</span><span class="s0">, </span><span class="s1">Command):</span>
+    <span class="s2">&quot;&quot;&quot;Install an .egg-info directory for the package&quot;&quot;&quot;</span>
+
+    <span class="s1">description = </span><span class="s3">&quot;Install an .egg-info directory for the package&quot;</span>
+
+    <span class="s1">user_options = [</span>
+        <span class="s1">(</span><span class="s3">'install-dir='</span><span class="s0">, </span><span class="s3">'d'</span><span class="s0">, </span><span class="s3">&quot;directory to install to&quot;</span><span class="s1">)</span><span class="s0">,</span>
+    <span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">initialize_options(self):</span>
+        <span class="s1">self.install_dir = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">finalize_options(self):</span>
+        <span class="s1">self.set_undefined_options(</span><span class="s3">'install_lib'</span><span class="s0">,</span>
+                                   <span class="s1">(</span><span class="s3">'install_dir'</span><span class="s0">, </span><span class="s3">'install_dir'</span><span class="s1">))</span>
+        <span class="s1">ei_cmd = self.get_finalized_command(</span><span class="s3">&quot;egg_info&quot;</span><span class="s1">)</span>
+        <span class="s1">basename = pkg_resources.Distribution(</span>
+            <span class="s0">None, None, </span><span class="s1">ei_cmd.egg_name</span><span class="s0">, </span><span class="s1">ei_cmd.egg_version</span>
+        <span class="s1">).egg_name() + </span><span class="s3">'.egg-info'</span>
+        <span class="s1">self.source = ei_cmd.egg_info</span>
+        <span class="s1">self.target = os.path.join(self.install_dir</span><span class="s0">, </span><span class="s1">basename)</span>
+        <span class="s1">self.outputs = []</span>
+
+    <span class="s0">def </span><span class="s1">run(self):</span>
+        <span class="s1">self.run_command(</span><span class="s3">'egg_info'</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">os.path.isdir(self.target) </span><span class="s0">and not </span><span class="s1">os.path.islink(self.target):</span>
+            <span class="s1">dir_util.remove_tree(self.target</span><span class="s0">, </span><span class="s1">dry_run=self.dry_run)</span>
+        <span class="s0">elif </span><span class="s1">os.path.exists(self.target):</span>
+            <span class="s1">self.execute(os.unlink</span><span class="s0">, </span><span class="s1">(self.target</span><span class="s0">,</span><span class="s1">)</span><span class="s0">, </span><span class="s3">&quot;Removing &quot; </span><span class="s1">+ self.target)</span>
+        <span class="s0">if not </span><span class="s1">self.dry_run:</span>
+            <span class="s1">pkg_resources.ensure_directory(self.target)</span>
+        <span class="s1">self.execute(</span>
+            <span class="s1">self.copytree</span><span class="s0">, </span><span class="s1">()</span><span class="s0">, </span><span class="s3">&quot;Copying %s to %s&quot; </span><span class="s1">% (self.source</span><span class="s0">, </span><span class="s1">self.target)</span>
+        <span class="s1">)</span>
+        <span class="s1">self.install_namespaces()</span>
+
+    <span class="s0">def </span><span class="s1">get_outputs(self):</span>
+        <span class="s0">return </span><span class="s1">self.outputs</span>
+
+    <span class="s0">def </span><span class="s1">copytree(self):</span>
+        <span class="s4"># Copy the .egg-info tree to site-packages</span>
+        <span class="s0">def </span><span class="s1">skimmer(src</span><span class="s0">, </span><span class="s1">dst):</span>
+            <span class="s4"># filter out source-control directories; note that 'src' is always</span>
+            <span class="s4"># a '/'-separated path, regardless of platform.  'dst' is a</span>
+            <span class="s4"># platform-specific path.</span>
+            <span class="s0">for </span><span class="s1">skip </span><span class="s0">in </span><span class="s3">'.svn/'</span><span class="s0">, </span><span class="s3">'CVS/'</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">src.startswith(skip) </span><span class="s0">or </span><span class="s3">'/' </span><span class="s1">+ skip </span><span class="s0">in </span><span class="s1">src:</span>
+                    <span class="s0">return None</span>
+            <span class="s1">self.outputs.append(dst)</span>
+            <span class="s1">log.debug(</span><span class="s3">&quot;Copying %s to %s&quot;</span><span class="s0">, </span><span class="s1">src</span><span class="s0">, </span><span class="s1">dst)</span>
+            <span class="s0">return </span><span class="s1">dst</span>
+
+        <span class="s1">unpack_archive(self.source</span><span class="s0">, </span><span class="s1">self.target</span><span class="s0">, </span><span class="s1">skimmer)</span>
+</pre>
+</body>
+</html>

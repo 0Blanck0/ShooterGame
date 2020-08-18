@@ -1,0 +1,352 @@
+<html>
+<head>
+<title>build_ext.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6a8759;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+build_ext.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">import </span><span class="s1">itertools</span>
+<span class="s0">from </span><span class="s1">distutils.command.build_ext </span><span class="s0">import </span><span class="s1">build_ext </span><span class="s0">as </span><span class="s1">_du_build_ext</span>
+<span class="s0">from </span><span class="s1">distutils.file_util </span><span class="s0">import </span><span class="s1">copy_file</span>
+<span class="s0">from </span><span class="s1">distutils.ccompiler </span><span class="s0">import </span><span class="s1">new_compiler</span>
+<span class="s0">from </span><span class="s1">distutils.sysconfig </span><span class="s0">import </span><span class="s1">customize_compiler</span><span class="s0">, </span><span class="s1">get_config_var</span>
+<span class="s0">from </span><span class="s1">distutils.errors </span><span class="s0">import </span><span class="s1">DistutilsError</span>
+<span class="s0">from </span><span class="s1">distutils </span><span class="s0">import </span><span class="s1">log</span>
+
+<span class="s0">from </span><span class="s1">setuptools.extension </span><span class="s0">import </span><span class="s1">Library</span>
+<span class="s0">from </span><span class="s1">setuptools.extern </span><span class="s0">import </span><span class="s1">six</span>
+
+<span class="s0">if </span><span class="s1">six.PY2:</span>
+    <span class="s0">import </span><span class="s1">imp</span>
+
+    <span class="s1">EXTENSION_SUFFIXES = [</span>
+        <span class="s1">s </span><span class="s0">for </span><span class="s1">s</span><span class="s0">, </span><span class="s1">_</span><span class="s0">, </span><span class="s1">tp </span><span class="s0">in </span><span class="s1">imp.get_suffixes() </span><span class="s0">if </span><span class="s1">tp == imp.C_EXTENSION]</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s0">from </span><span class="s1">importlib.machinery </span><span class="s0">import </span><span class="s1">EXTENSION_SUFFIXES</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s2"># Attempt to use Cython for building extensions, if available</span>
+    <span class="s0">from </span><span class="s1">Cython.Distutils.build_ext </span><span class="s0">import </span><span class="s1">build_ext </span><span class="s0">as </span><span class="s1">_build_ext</span>
+    <span class="s2"># Additionally, assert that the compiler module will load</span>
+    <span class="s2"># also. Ref #1229.</span>
+    <span class="s1">__import__(</span><span class="s3">'Cython.Compiler.Main'</span><span class="s1">)</span>
+<span class="s0">except </span><span class="s1">ImportError:</span>
+    <span class="s1">_build_ext = _du_build_ext</span>
+
+<span class="s2"># make sure _config_vars is initialized</span>
+<span class="s1">get_config_var(</span><span class="s3">&quot;LDSHARED&quot;</span><span class="s1">)</span>
+<span class="s0">from </span><span class="s1">distutils.sysconfig </span><span class="s0">import </span><span class="s1">_config_vars </span><span class="s0">as </span><span class="s1">_CONFIG_VARS  </span><span class="s2"># noqa</span>
+
+
+<span class="s0">def </span><span class="s1">_customize_compiler_for_shlib(compiler):</span>
+    <span class="s0">if </span><span class="s1">sys.platform == </span><span class="s3">&quot;darwin&quot;</span><span class="s1">:</span>
+        <span class="s2"># building .dylib requires additional compiler flags on OSX; here we</span>
+        <span class="s2"># temporarily substitute the pyconfig.h variables so that distutils'</span>
+        <span class="s2"># 'customize_compiler' uses them before we build the shared libraries.</span>
+        <span class="s1">tmp = _CONFIG_VARS.copy()</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s2"># XXX Help!  I don't have any idea whether these are right...</span>
+            <span class="s1">_CONFIG_VARS[</span><span class="s3">'LDSHARED'</span><span class="s1">] = (</span>
+                <span class="s3">&quot;gcc -Wl,-x -dynamiclib -undefined dynamic_lookup&quot;</span><span class="s1">)</span>
+            <span class="s1">_CONFIG_VARS[</span><span class="s3">'CCSHARED'</span><span class="s1">] = </span><span class="s3">&quot; -dynamiclib&quot;</span>
+            <span class="s1">_CONFIG_VARS[</span><span class="s3">'SO'</span><span class="s1">] = </span><span class="s3">&quot;.dylib&quot;</span>
+            <span class="s1">customize_compiler(compiler)</span>
+        <span class="s0">finally</span><span class="s1">:</span>
+            <span class="s1">_CONFIG_VARS.clear()</span>
+            <span class="s1">_CONFIG_VARS.update(tmp)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">customize_compiler(compiler)</span>
+
+
+<span class="s1">have_rtld = </span><span class="s0">False</span>
+<span class="s1">use_stubs = </span><span class="s0">False</span>
+<span class="s1">libtype = </span><span class="s3">'shared'</span>
+
+<span class="s0">if </span><span class="s1">sys.platform == </span><span class="s3">&quot;darwin&quot;</span><span class="s1">:</span>
+    <span class="s1">use_stubs = </span><span class="s0">True</span>
+<span class="s0">elif </span><span class="s1">os.name != </span><span class="s3">'nt'</span><span class="s1">:</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s0">import </span><span class="s1">dl</span>
+        <span class="s1">use_stubs = have_rtld = hasattr(dl</span><span class="s0">, </span><span class="s3">'RTLD_NOW'</span><span class="s1">)</span>
+    <span class="s0">except </span><span class="s1">ImportError:</span>
+        <span class="s0">pass</span>
+
+
+<span class="s0">def </span><span class="s1">if_dl(s):</span>
+    <span class="s0">return </span><span class="s1">s </span><span class="s0">if </span><span class="s1">have_rtld </span><span class="s0">else </span><span class="s3">''</span>
+
+
+<span class="s0">def </span><span class="s1">get_abi3_suffix():</span>
+    <span class="s4">&quot;&quot;&quot;Return the file extension for an abi3-compliant Extension()&quot;&quot;&quot;</span>
+    <span class="s0">for </span><span class="s1">suffix </span><span class="s0">in </span><span class="s1">EXTENSION_SUFFIXES:</span>
+        <span class="s0">if </span><span class="s3">'.abi3' </span><span class="s0">in </span><span class="s1">suffix:  </span><span class="s2"># Unix</span>
+            <span class="s0">return </span><span class="s1">suffix</span>
+        <span class="s0">elif </span><span class="s1">suffix == </span><span class="s3">'.pyd'</span><span class="s1">:  </span><span class="s2"># Windows</span>
+            <span class="s0">return </span><span class="s1">suffix</span>
+
+
+<span class="s0">class </span><span class="s1">build_ext(_build_ext):</span>
+    <span class="s0">def </span><span class="s1">run(self):</span>
+        <span class="s4">&quot;&quot;&quot;Build extensions in build directory, then copy if --inplace&quot;&quot;&quot;</span>
+        <span class="s1">old_inplace</span><span class="s0">, </span><span class="s1">self.inplace = self.inplace</span><span class="s0">, </span><span class="s5">0</span>
+        <span class="s1">_build_ext.run(self)</span>
+        <span class="s1">self.inplace = old_inplace</span>
+        <span class="s0">if </span><span class="s1">old_inplace:</span>
+            <span class="s1">self.copy_extensions_to_source()</span>
+
+    <span class="s0">def </span><span class="s1">copy_extensions_to_source(self):</span>
+        <span class="s1">build_py = self.get_finalized_command(</span><span class="s3">'build_py'</span><span class="s1">)</span>
+        <span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">self.extensions:</span>
+            <span class="s1">fullname = self.get_ext_fullname(ext.name)</span>
+            <span class="s1">filename = self.get_ext_filename(fullname)</span>
+            <span class="s1">modpath = fullname.split(</span><span class="s3">'.'</span><span class="s1">)</span>
+            <span class="s1">package = </span><span class="s3">'.'</span><span class="s1">.join(modpath[:-</span><span class="s5">1</span><span class="s1">])</span>
+            <span class="s1">package_dir = build_py.get_package_dir(package)</span>
+            <span class="s1">dest_filename = os.path.join(package_dir</span><span class="s0">,</span>
+                                         <span class="s1">os.path.basename(filename))</span>
+            <span class="s1">src_filename = os.path.join(self.build_lib</span><span class="s0">, </span><span class="s1">filename)</span>
+
+            <span class="s2"># Always copy, even if source is older than destination, to ensure</span>
+            <span class="s2"># that the right extensions for the current Python/platform are</span>
+            <span class="s2"># used.</span>
+            <span class="s1">copy_file(</span>
+                <span class="s1">src_filename</span><span class="s0">, </span><span class="s1">dest_filename</span><span class="s0">, </span><span class="s1">verbose=self.verbose</span><span class="s0">,</span>
+                <span class="s1">dry_run=self.dry_run</span>
+            <span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">ext._needs_stub:</span>
+                <span class="s1">self.write_stub(package_dir </span><span class="s0">or </span><span class="s1">os.curdir</span><span class="s0">, </span><span class="s1">ext</span><span class="s0">, True</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">get_ext_filename(self</span><span class="s0">, </span><span class="s1">fullname):</span>
+        <span class="s1">filename = _build_ext.get_ext_filename(self</span><span class="s0">, </span><span class="s1">fullname)</span>
+        <span class="s0">if </span><span class="s1">fullname </span><span class="s0">in </span><span class="s1">self.ext_map:</span>
+            <span class="s1">ext = self.ext_map[fullname]</span>
+            <span class="s1">use_abi3 = (</span>
+                <span class="s0">not </span><span class="s1">six.PY2</span>
+                <span class="s0">and </span><span class="s1">getattr(ext</span><span class="s0">, </span><span class="s3">'py_limited_api'</span><span class="s1">)</span>
+                <span class="s0">and </span><span class="s1">get_abi3_suffix()</span>
+            <span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">use_abi3:</span>
+                <span class="s1">so_ext = get_config_var(</span><span class="s3">'EXT_SUFFIX'</span><span class="s1">)</span>
+                <span class="s1">filename = filename[:-len(so_ext)]</span>
+                <span class="s1">filename = filename + get_abi3_suffix()</span>
+            <span class="s0">if </span><span class="s1">isinstance(ext</span><span class="s0">, </span><span class="s1">Library):</span>
+                <span class="s1">fn</span><span class="s0">, </span><span class="s1">ext = os.path.splitext(filename)</span>
+                <span class="s0">return </span><span class="s1">self.shlib_compiler.library_filename(fn</span><span class="s0">, </span><span class="s1">libtype)</span>
+            <span class="s0">elif </span><span class="s1">use_stubs </span><span class="s0">and </span><span class="s1">ext._links_to_dynamic:</span>
+                <span class="s1">d</span><span class="s0">, </span><span class="s1">fn = os.path.split(filename)</span>
+                <span class="s0">return </span><span class="s1">os.path.join(d</span><span class="s0">, </span><span class="s3">'dl-' </span><span class="s1">+ fn)</span>
+        <span class="s0">return </span><span class="s1">filename</span>
+
+    <span class="s0">def </span><span class="s1">initialize_options(self):</span>
+        <span class="s1">_build_ext.initialize_options(self)</span>
+        <span class="s1">self.shlib_compiler = </span><span class="s0">None</span>
+        <span class="s1">self.shlibs = []</span>
+        <span class="s1">self.ext_map = {}</span>
+
+    <span class="s0">def </span><span class="s1">finalize_options(self):</span>
+        <span class="s1">_build_ext.finalize_options(self)</span>
+        <span class="s1">self.extensions = self.extensions </span><span class="s0">or </span><span class="s1">[]</span>
+        <span class="s1">self.check_extensions_list(self.extensions)</span>
+        <span class="s1">self.shlibs = [ext </span><span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">self.extensions</span>
+                       <span class="s0">if </span><span class="s1">isinstance(ext</span><span class="s0">, </span><span class="s1">Library)]</span>
+        <span class="s0">if </span><span class="s1">self.shlibs:</span>
+            <span class="s1">self.setup_shlib_compiler()</span>
+        <span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">self.extensions:</span>
+            <span class="s1">ext._full_name = self.get_ext_fullname(ext.name)</span>
+        <span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">self.extensions:</span>
+            <span class="s1">fullname = ext._full_name</span>
+            <span class="s1">self.ext_map[fullname] = ext</span>
+
+            <span class="s2"># distutils 3.1 will also ask for module names</span>
+            <span class="s2"># XXX what to do with conflicts?</span>
+            <span class="s1">self.ext_map[fullname.split(</span><span class="s3">'.'</span><span class="s1">)[-</span><span class="s5">1</span><span class="s1">]] = ext</span>
+
+            <span class="s1">ltd = self.shlibs </span><span class="s0">and </span><span class="s1">self.links_to_dynamic(ext) </span><span class="s0">or False</span>
+            <span class="s1">ns = ltd </span><span class="s0">and </span><span class="s1">use_stubs </span><span class="s0">and not </span><span class="s1">isinstance(ext</span><span class="s0">, </span><span class="s1">Library)</span>
+            <span class="s1">ext._links_to_dynamic = ltd</span>
+            <span class="s1">ext._needs_stub = ns</span>
+            <span class="s1">filename = ext._file_name = self.get_ext_filename(fullname)</span>
+            <span class="s1">libdir = os.path.dirname(os.path.join(self.build_lib</span><span class="s0">, </span><span class="s1">filename))</span>
+            <span class="s0">if </span><span class="s1">ltd </span><span class="s0">and </span><span class="s1">libdir </span><span class="s0">not in </span><span class="s1">ext.library_dirs:</span>
+                <span class="s1">ext.library_dirs.append(libdir)</span>
+            <span class="s0">if </span><span class="s1">ltd </span><span class="s0">and </span><span class="s1">use_stubs </span><span class="s0">and </span><span class="s1">os.curdir </span><span class="s0">not in </span><span class="s1">ext.runtime_library_dirs:</span>
+                <span class="s1">ext.runtime_library_dirs.append(os.curdir)</span>
+
+    <span class="s0">def </span><span class="s1">setup_shlib_compiler(self):</span>
+        <span class="s1">compiler = self.shlib_compiler = new_compiler(</span>
+            <span class="s1">compiler=self.compiler</span><span class="s0">, </span><span class="s1">dry_run=self.dry_run</span><span class="s0">, </span><span class="s1">force=self.force</span>
+        <span class="s1">)</span>
+        <span class="s1">_customize_compiler_for_shlib(compiler)</span>
+
+        <span class="s0">if </span><span class="s1">self.include_dirs </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">compiler.set_include_dirs(self.include_dirs)</span>
+        <span class="s0">if </span><span class="s1">self.define </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s2"># 'define' option is a list of (name,value) tuples</span>
+            <span class="s0">for </span><span class="s1">(name</span><span class="s0">, </span><span class="s1">value) </span><span class="s0">in </span><span class="s1">self.define:</span>
+                <span class="s1">compiler.define_macro(name</span><span class="s0">, </span><span class="s1">value)</span>
+        <span class="s0">if </span><span class="s1">self.undef </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s0">for </span><span class="s1">macro </span><span class="s0">in </span><span class="s1">self.undef:</span>
+                <span class="s1">compiler.undefine_macro(macro)</span>
+        <span class="s0">if </span><span class="s1">self.libraries </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">compiler.set_libraries(self.libraries)</span>
+        <span class="s0">if </span><span class="s1">self.library_dirs </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">compiler.set_library_dirs(self.library_dirs)</span>
+        <span class="s0">if </span><span class="s1">self.rpath </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">compiler.set_runtime_library_dirs(self.rpath)</span>
+        <span class="s0">if </span><span class="s1">self.link_objects </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s1">compiler.set_link_objects(self.link_objects)</span>
+
+        <span class="s2"># hack so distutils' build_extension() builds a library instead</span>
+        <span class="s1">compiler.link_shared_object = link_shared_object.__get__(compiler)</span>
+
+    <span class="s0">def </span><span class="s1">get_export_symbols(self</span><span class="s0">, </span><span class="s1">ext):</span>
+        <span class="s0">if </span><span class="s1">isinstance(ext</span><span class="s0">, </span><span class="s1">Library):</span>
+            <span class="s0">return </span><span class="s1">ext.export_symbols</span>
+        <span class="s0">return </span><span class="s1">_build_ext.get_export_symbols(self</span><span class="s0">, </span><span class="s1">ext)</span>
+
+    <span class="s0">def </span><span class="s1">build_extension(self</span><span class="s0">, </span><span class="s1">ext):</span>
+        <span class="s1">ext._convert_pyx_sources_to_lang()</span>
+        <span class="s1">_compiler = self.compiler</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">isinstance(ext</span><span class="s0">, </span><span class="s1">Library):</span>
+                <span class="s1">self.compiler = self.shlib_compiler</span>
+            <span class="s1">_build_ext.build_extension(self</span><span class="s0">, </span><span class="s1">ext)</span>
+            <span class="s0">if </span><span class="s1">ext._needs_stub:</span>
+                <span class="s1">cmd = self.get_finalized_command(</span><span class="s3">'build_py'</span><span class="s1">).build_lib</span>
+                <span class="s1">self.write_stub(cmd</span><span class="s0">, </span><span class="s1">ext)</span>
+        <span class="s0">finally</span><span class="s1">:</span>
+            <span class="s1">self.compiler = _compiler</span>
+
+    <span class="s0">def </span><span class="s1">links_to_dynamic(self</span><span class="s0">, </span><span class="s1">ext):</span>
+        <span class="s4">&quot;&quot;&quot;Return true if 'ext' links to a dynamic lib in the same package&quot;&quot;&quot;</span>
+        <span class="s2"># XXX this should check to ensure the lib is actually being built</span>
+        <span class="s2"># XXX as dynamic, and not just using a locally-found version or a</span>
+        <span class="s2"># XXX static-compiled version</span>
+        <span class="s1">libnames = dict.fromkeys([lib._full_name </span><span class="s0">for </span><span class="s1">lib </span><span class="s0">in </span><span class="s1">self.shlibs])</span>
+        <span class="s1">pkg = </span><span class="s3">'.'</span><span class="s1">.join(ext._full_name.split(</span><span class="s3">'.'</span><span class="s1">)[:-</span><span class="s5">1</span><span class="s1">] + [</span><span class="s3">''</span><span class="s1">])</span>
+        <span class="s0">return </span><span class="s1">any(pkg + libname </span><span class="s0">in </span><span class="s1">libnames </span><span class="s0">for </span><span class="s1">libname </span><span class="s0">in </span><span class="s1">ext.libraries)</span>
+
+    <span class="s0">def </span><span class="s1">get_outputs(self):</span>
+        <span class="s0">return </span><span class="s1">_build_ext.get_outputs(self) + self.__get_stubs_outputs()</span>
+
+    <span class="s0">def </span><span class="s1">__get_stubs_outputs(self):</span>
+        <span class="s2"># assemble the base name for each extension that needs a stub</span>
+        <span class="s1">ns_ext_bases = (</span>
+            <span class="s1">os.path.join(self.build_lib</span><span class="s0">, </span><span class="s1">*ext._full_name.split(</span><span class="s3">'.'</span><span class="s1">))</span>
+            <span class="s0">for </span><span class="s1">ext </span><span class="s0">in </span><span class="s1">self.extensions</span>
+            <span class="s0">if </span><span class="s1">ext._needs_stub</span>
+        <span class="s1">)</span>
+        <span class="s2"># pair each base with the extension</span>
+        <span class="s1">pairs = itertools.product(ns_ext_bases</span><span class="s0">, </span><span class="s1">self.__get_output_extensions())</span>
+        <span class="s0">return </span><span class="s1">list(base + fnext </span><span class="s0">for </span><span class="s1">base</span><span class="s0">, </span><span class="s1">fnext </span><span class="s0">in </span><span class="s1">pairs)</span>
+
+    <span class="s0">def </span><span class="s1">__get_output_extensions(self):</span>
+        <span class="s0">yield </span><span class="s3">'.py'</span>
+        <span class="s0">yield </span><span class="s3">'.pyc'</span>
+        <span class="s0">if </span><span class="s1">self.get_finalized_command(</span><span class="s3">'build_py'</span><span class="s1">).optimize:</span>
+            <span class="s0">yield </span><span class="s3">'.pyo'</span>
+
+    <span class="s0">def </span><span class="s1">write_stub(self</span><span class="s0">, </span><span class="s1">output_dir</span><span class="s0">, </span><span class="s1">ext</span><span class="s0">, </span><span class="s1">compile=</span><span class="s0">False</span><span class="s1">):</span>
+        <span class="s1">log.info(</span><span class="s3">&quot;writing stub loader for %s to %s&quot;</span><span class="s0">, </span><span class="s1">ext._full_name</span><span class="s0">,</span>
+                 <span class="s1">output_dir)</span>
+        <span class="s1">stub_file = (os.path.join(output_dir</span><span class="s0">, </span><span class="s1">*ext._full_name.split(</span><span class="s3">'.'</span><span class="s1">)) +</span>
+                     <span class="s3">'.py'</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">compile </span><span class="s0">and </span><span class="s1">os.path.exists(stub_file):</span>
+            <span class="s0">raise </span><span class="s1">DistutilsError(stub_file + </span><span class="s3">&quot; already exists! Please delete.&quot;</span><span class="s1">)</span>
+        <span class="s0">if not </span><span class="s1">self.dry_run:</span>
+            <span class="s1">f = open(stub_file</span><span class="s0">, </span><span class="s3">'w'</span><span class="s1">)</span>
+            <span class="s1">f.write(</span>
+                <span class="s3">'</span><span class="s0">\n</span><span class="s3">'</span><span class="s1">.join([</span>
+                    <span class="s3">&quot;def __bootstrap__():&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;   global __bootstrap__, __file__, __loader__&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;   import sys, os, pkg_resources, imp&quot; </span><span class="s1">+ if_dl(</span><span class="s3">&quot;, dl&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                    <span class="s3">&quot;   __file__ = pkg_resources.resource_filename&quot;</span>
+                    <span class="s3">&quot;(__name__,%r)&quot;</span>
+                    <span class="s1">% os.path.basename(ext._file_name)</span><span class="s0">,</span>
+                    <span class="s3">&quot;   del __bootstrap__&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;   if '__loader__' in globals():&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;       del __loader__&quot;</span><span class="s0">,</span>
+                    <span class="s1">if_dl(</span><span class="s3">&quot;   old_flags = sys.getdlopenflags()&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                    <span class="s3">&quot;   old_dir = os.getcwd()&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;   try:&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;     os.chdir(os.path.dirname(__file__))&quot;</span><span class="s0">,</span>
+                    <span class="s1">if_dl(</span><span class="s3">&quot;     sys.setdlopenflags(dl.RTLD_NOW)&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                    <span class="s3">&quot;     imp.load_dynamic(__name__,__file__)&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;   finally:&quot;</span><span class="s0">,</span>
+                    <span class="s1">if_dl(</span><span class="s3">&quot;     sys.setdlopenflags(old_flags)&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                    <span class="s3">&quot;     os.chdir(old_dir)&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;__bootstrap__()&quot;</span><span class="s0">,</span>
+                    <span class="s3">&quot;&quot;  </span><span class="s2"># terminal \n</span>
+                <span class="s1">])</span>
+            <span class="s1">)</span>
+            <span class="s1">f.close()</span>
+        <span class="s0">if </span><span class="s1">compile:</span>
+            <span class="s0">from </span><span class="s1">distutils.util </span><span class="s0">import </span><span class="s1">byte_compile</span>
+
+            <span class="s1">byte_compile([stub_file]</span><span class="s0">, </span><span class="s1">optimize=</span><span class="s5">0</span><span class="s0">,</span>
+                         <span class="s1">force=</span><span class="s0">True, </span><span class="s1">dry_run=self.dry_run)</span>
+            <span class="s1">optimize = self.get_finalized_command(</span><span class="s3">'install_lib'</span><span class="s1">).optimize</span>
+            <span class="s0">if </span><span class="s1">optimize &gt; </span><span class="s5">0</span><span class="s1">:</span>
+                <span class="s1">byte_compile([stub_file]</span><span class="s0">, </span><span class="s1">optimize=optimize</span><span class="s0">,</span>
+                             <span class="s1">force=</span><span class="s0">True, </span><span class="s1">dry_run=self.dry_run)</span>
+            <span class="s0">if </span><span class="s1">os.path.exists(stub_file) </span><span class="s0">and not </span><span class="s1">self.dry_run:</span>
+                <span class="s1">os.unlink(stub_file)</span>
+
+
+<span class="s0">if </span><span class="s1">use_stubs </span><span class="s0">or </span><span class="s1">os.name == </span><span class="s3">'nt'</span><span class="s1">:</span>
+    <span class="s2"># Build shared libraries</span>
+    <span class="s2">#</span>
+    <span class="s0">def </span><span class="s1">link_shared_object(</span>
+            <span class="s1">self</span><span class="s0">, </span><span class="s1">objects</span><span class="s0">, </span><span class="s1">output_libname</span><span class="s0">, </span><span class="s1">output_dir=</span><span class="s0">None, </span><span class="s1">libraries=</span><span class="s0">None,</span>
+            <span class="s1">library_dirs=</span><span class="s0">None, </span><span class="s1">runtime_library_dirs=</span><span class="s0">None, </span><span class="s1">export_symbols=</span><span class="s0">None,</span>
+            <span class="s1">debug=</span><span class="s5">0</span><span class="s0">, </span><span class="s1">extra_preargs=</span><span class="s0">None, </span><span class="s1">extra_postargs=</span><span class="s0">None, </span><span class="s1">build_temp=</span><span class="s0">None,</span>
+            <span class="s1">target_lang=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s1">self.link(</span>
+            <span class="s1">self.SHARED_LIBRARY</span><span class="s0">, </span><span class="s1">objects</span><span class="s0">, </span><span class="s1">output_libname</span><span class="s0">,</span>
+            <span class="s1">output_dir</span><span class="s0">, </span><span class="s1">libraries</span><span class="s0">, </span><span class="s1">library_dirs</span><span class="s0">, </span><span class="s1">runtime_library_dirs</span><span class="s0">,</span>
+            <span class="s1">export_symbols</span><span class="s0">, </span><span class="s1">debug</span><span class="s0">, </span><span class="s1">extra_preargs</span><span class="s0">, </span><span class="s1">extra_postargs</span><span class="s0">,</span>
+            <span class="s1">build_temp</span><span class="s0">, </span><span class="s1">target_lang</span>
+        <span class="s1">)</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s2"># Build static libraries everywhere else</span>
+    <span class="s1">libtype = </span><span class="s3">'static'</span>
+
+    <span class="s0">def </span><span class="s1">link_shared_object(</span>
+            <span class="s1">self</span><span class="s0">, </span><span class="s1">objects</span><span class="s0">, </span><span class="s1">output_libname</span><span class="s0">, </span><span class="s1">output_dir=</span><span class="s0">None, </span><span class="s1">libraries=</span><span class="s0">None,</span>
+            <span class="s1">library_dirs=</span><span class="s0">None, </span><span class="s1">runtime_library_dirs=</span><span class="s0">None, </span><span class="s1">export_symbols=</span><span class="s0">None,</span>
+            <span class="s1">debug=</span><span class="s5">0</span><span class="s0">, </span><span class="s1">extra_preargs=</span><span class="s0">None, </span><span class="s1">extra_postargs=</span><span class="s0">None, </span><span class="s1">build_temp=</span><span class="s0">None,</span>
+            <span class="s1">target_lang=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s2"># XXX we need to either disallow these attrs on Library instances,</span>
+        <span class="s2"># or warn/abort here if set, or something...</span>
+        <span class="s2"># libraries=None, library_dirs=None, runtime_library_dirs=None,</span>
+        <span class="s2"># export_symbols=None, extra_preargs=None, extra_postargs=None,</span>
+        <span class="s2"># build_temp=None</span>
+
+        <span class="s0">assert </span><span class="s1">output_dir </span><span class="s0">is None  </span><span class="s2"># distutils build_ext doesn't pass this</span>
+        <span class="s1">output_dir</span><span class="s0">, </span><span class="s1">filename = os.path.split(output_libname)</span>
+        <span class="s1">basename</span><span class="s0">, </span><span class="s1">ext = os.path.splitext(filename)</span>
+        <span class="s0">if </span><span class="s1">self.library_filename(</span><span class="s3">&quot;x&quot;</span><span class="s1">).startswith(</span><span class="s3">'lib'</span><span class="s1">):</span>
+            <span class="s2"># strip 'lib' prefix; this is kludgy if some platform uses</span>
+            <span class="s2"># a different prefix</span>
+            <span class="s1">basename = basename[</span><span class="s5">3</span><span class="s1">:]</span>
+
+        <span class="s1">self.create_static_lib(</span>
+            <span class="s1">objects</span><span class="s0">, </span><span class="s1">basename</span><span class="s0">, </span><span class="s1">output_dir</span><span class="s0">, </span><span class="s1">debug</span><span class="s0">, </span><span class="s1">target_lang</span>
+        <span class="s1">)</span>
+</pre>
+</body>
+</html>

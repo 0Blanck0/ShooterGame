@@ -1,0 +1,46 @@
+<html>
+<head>
+<title>dep_util.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dep_util.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">distutils.dep_util </span><span class="s0">import </span><span class="s1">newer_group</span>
+
+
+<span class="s2"># yes, this is was almost entirely copy-pasted from</span>
+<span class="s2"># 'newer_pairwise()', this is just another convenience</span>
+<span class="s2"># function.</span>
+<span class="s0">def </span><span class="s1">newer_pairwise_group(sources_groups</span><span class="s0">, </span><span class="s1">targets):</span>
+    <span class="s3">&quot;&quot;&quot;Walk both arguments in parallel, testing if each source group is newer 
+    than its corresponding target. Returns a pair of lists (sources_groups, 
+    targets) where sources is newer than target, according to the semantics 
+    of 'newer_group()'. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">if </span><span class="s1">len(sources_groups) != len(targets):</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span>
+            <span class="s4">&quot;'sources_group' and 'targets' must be the same length&quot;</span><span class="s1">)</span>
+
+    <span class="s2"># build a pair of lists (sources_groups, targets) where source is newer</span>
+    <span class="s1">n_sources = []</span>
+    <span class="s1">n_targets = []</span>
+    <span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(len(sources_groups)):</span>
+        <span class="s0">if </span><span class="s1">newer_group(sources_groups[i]</span><span class="s0">, </span><span class="s1">targets[i]):</span>
+            <span class="s1">n_sources.append(sources_groups[i])</span>
+            <span class="s1">n_targets.append(targets[i])</span>
+
+    <span class="s0">return </span><span class="s1">n_sources</span><span class="s0">, </span><span class="s1">n_targets</span>
+</pre>
+</body>
+</html>

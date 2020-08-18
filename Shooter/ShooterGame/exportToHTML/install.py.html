@@ -1,0 +1,147 @@
+<html>
+<head>
+<title>install.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+install.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">distutils.errors </span><span class="s0">import </span><span class="s1">DistutilsArgError</span>
+<span class="s0">import </span><span class="s1">inspect</span>
+<span class="s0">import </span><span class="s1">glob</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">import </span><span class="s1">platform</span>
+<span class="s0">import </span><span class="s1">distutils.command.install </span><span class="s0">as </span><span class="s1">orig</span>
+
+<span class="s0">import </span><span class="s1">setuptools</span>
+
+<span class="s2"># Prior to numpy 1.9, NumPy relies on the '_install' name, so provide it for</span>
+<span class="s2"># now. See https://github.com/pypa/setuptools/issues/199/</span>
+<span class="s1">_install = orig.install</span>
+
+
+<span class="s0">class </span><span class="s1">install(orig.install):</span>
+    <span class="s3">&quot;&quot;&quot;Use easy_install to install the package, w/dependencies&quot;&quot;&quot;</span>
+
+    <span class="s1">user_options = orig.install.user_options + [</span>
+        <span class="s1">(</span><span class="s4">'old-and-unmanageable'</span><span class="s0">, None, </span><span class="s4">&quot;Try not to use this!&quot;</span><span class="s1">)</span><span class="s0">,</span>
+        <span class="s1">(</span><span class="s4">'single-version-externally-managed'</span><span class="s0">, None,</span>
+         <span class="s4">&quot;used by system package builders to create 'flat' eggs&quot;</span><span class="s1">)</span><span class="s0">,</span>
+    <span class="s1">]</span>
+    <span class="s1">boolean_options = orig.install.boolean_options + [</span>
+        <span class="s4">'old-and-unmanageable'</span><span class="s0">, </span><span class="s4">'single-version-externally-managed'</span><span class="s0">,</span>
+    <span class="s1">]</span>
+    <span class="s1">new_commands = [</span>
+        <span class="s1">(</span><span class="s4">'install_egg_info'</span><span class="s0">, lambda </span><span class="s1">self: </span><span class="s0">True</span><span class="s1">)</span><span class="s0">,</span>
+        <span class="s1">(</span><span class="s4">'install_scripts'</span><span class="s0">, lambda </span><span class="s1">self: </span><span class="s0">True</span><span class="s1">)</span><span class="s0">,</span>
+    <span class="s1">]</span>
+    <span class="s1">_nc = dict(new_commands)</span>
+
+    <span class="s0">def </span><span class="s1">initialize_options(self):</span>
+        <span class="s1">orig.install.initialize_options(self)</span>
+        <span class="s1">self.old_and_unmanageable = </span><span class="s0">None</span>
+        <span class="s1">self.single_version_externally_managed = </span><span class="s0">None</span>
+
+    <span class="s0">def </span><span class="s1">finalize_options(self):</span>
+        <span class="s1">orig.install.finalize_options(self)</span>
+        <span class="s0">if </span><span class="s1">self.root:</span>
+            <span class="s1">self.single_version_externally_managed = </span><span class="s0">True</span>
+        <span class="s0">elif </span><span class="s1">self.single_version_externally_managed:</span>
+            <span class="s0">if not </span><span class="s1">self.root </span><span class="s0">and not </span><span class="s1">self.record:</span>
+                <span class="s0">raise </span><span class="s1">DistutilsArgError(</span>
+                    <span class="s4">&quot;You must specify --record or --root when building system&quot;</span>
+                    <span class="s4">&quot; packages&quot;</span>
+                <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">handle_extra_path(self):</span>
+        <span class="s0">if </span><span class="s1">self.root </span><span class="s0">or </span><span class="s1">self.single_version_externally_managed:</span>
+            <span class="s2"># explicit backward-compatibility mode, allow extra_path to work</span>
+            <span class="s0">return </span><span class="s1">orig.install.handle_extra_path(self)</span>
+
+        <span class="s2"># Ignore extra_path when installing an egg (or being run by another</span>
+        <span class="s2"># command without --root or --single-version-externally-managed</span>
+        <span class="s1">self.path_file = </span><span class="s0">None</span>
+        <span class="s1">self.extra_dirs = </span><span class="s4">''</span>
+
+    <span class="s0">def </span><span class="s1">run(self):</span>
+        <span class="s2"># Explicit request for old-style install?  Just do it</span>
+        <span class="s0">if </span><span class="s1">self.old_and_unmanageable </span><span class="s0">or </span><span class="s1">self.single_version_externally_managed:</span>
+            <span class="s0">return </span><span class="s1">orig.install.run(self)</span>
+
+        <span class="s0">if not </span><span class="s1">self._called_from_setup(inspect.currentframe()):</span>
+            <span class="s2"># Run in backward-compatibility mode to support bdist_* commands.</span>
+            <span class="s1">orig.install.run(self)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">self.do_egg_install()</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_called_from_setup(run_frame):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Attempt to detect whether run() was called from setup() or by another 
+        command.  If called by setup(), the parent caller will be the 
+        'run_command' method in 'distutils.dist', and *its* caller will be 
+        the 'run_commands' method.  If called any other way, the 
+        immediate caller *might* be 'run_command', but it won't have been 
+        called by 'run_commands'. Return True in that case or if a call stack 
+        is unavailable. Return False otherwise. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">run_frame </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">msg = </span><span class="s4">&quot;Call stack not available. bdist_* commands may fail.&quot;</span>
+            <span class="s1">warnings.warn(msg)</span>
+            <span class="s0">if </span><span class="s1">platform.python_implementation() == </span><span class="s4">'IronPython'</span><span class="s1">:</span>
+                <span class="s1">msg = </span><span class="s4">&quot;For best results, pass -X:Frames to enable call stack.&quot;</span>
+                <span class="s1">warnings.warn(msg)</span>
+            <span class="s0">return True</span>
+        <span class="s1">res = inspect.getouterframes(run_frame)[</span><span class="s5">2</span><span class="s1">]</span>
+        <span class="s1">caller</span><span class="s0">, </span><span class="s1">= res[:</span><span class="s5">1</span><span class="s1">]</span>
+        <span class="s1">info = inspect.getframeinfo(caller)</span>
+        <span class="s1">caller_module = caller.f_globals.get(</span><span class="s4">'__name__'</span><span class="s0">, </span><span class="s4">''</span><span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">(</span>
+            <span class="s1">caller_module == </span><span class="s4">'distutils.dist'</span>
+            <span class="s0">and </span><span class="s1">info.function == </span><span class="s4">'run_commands'</span>
+        <span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">do_egg_install(self):</span>
+
+        <span class="s1">easy_install = self.distribution.get_command_class(</span><span class="s4">'easy_install'</span><span class="s1">)</span>
+
+        <span class="s1">cmd = easy_install(</span>
+            <span class="s1">self.distribution</span><span class="s0">, </span><span class="s1">args=</span><span class="s4">&quot;x&quot;</span><span class="s0">, </span><span class="s1">root=self.root</span><span class="s0">, </span><span class="s1">record=self.record</span><span class="s0">,</span>
+        <span class="s1">)</span>
+        <span class="s1">cmd.ensure_finalized()  </span><span class="s2"># finalize before bdist_egg munges install cmd</span>
+        <span class="s1">cmd.always_copy_from = </span><span class="s4">'.'  </span><span class="s2"># make sure local-dir eggs get installed</span>
+
+        <span class="s2"># pick up setup-dir .egg files only: no .egg-info</span>
+        <span class="s1">cmd.package_index.scan(glob.glob(</span><span class="s4">'*.egg'</span><span class="s1">))</span>
+
+        <span class="s1">self.run_command(</span><span class="s4">'bdist_egg'</span><span class="s1">)</span>
+        <span class="s1">args = [self.distribution.get_command_obj(</span><span class="s4">'bdist_egg'</span><span class="s1">).egg_output]</span>
+
+        <span class="s0">if </span><span class="s1">setuptools.bootstrap_install_from:</span>
+            <span class="s2"># Bootstrap self-installation of setuptools</span>
+            <span class="s1">args.insert(</span><span class="s5">0</span><span class="s0">, </span><span class="s1">setuptools.bootstrap_install_from)</span>
+
+        <span class="s1">cmd.args = args</span>
+        <span class="s1">cmd.run(show_deprecation=</span><span class="s0">False</span><span class="s1">)</span>
+        <span class="s1">setuptools.bootstrap_install_from = </span><span class="s0">None</span>
+
+
+<span class="s2"># XXX Python 3.1 doesn't see _nc if this is inside the class</span>
+<span class="s1">install.sub_commands = (</span>
+    <span class="s1">[cmd </span><span class="s0">for </span><span class="s1">cmd </span><span class="s0">in </span><span class="s1">orig.install.sub_commands </span><span class="s0">if </span><span class="s1">cmd[</span><span class="s5">0</span><span class="s1">] </span><span class="s0">not in </span><span class="s1">install._nc] +</span>
+    <span class="s1">install.new_commands</span>
+<span class="s1">)</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>metadata_legacy.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+metadata_legacy.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Metadata generation logic for legacy source distributions. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">logging</span>
+<span class="s2">import </span><span class="s1">os</span>
+
+<span class="s2">from </span><span class="s1">pip._internal.exceptions </span><span class="s2">import </span><span class="s1">InstallationError</span>
+<span class="s2">from </span><span class="s1">pip._internal.utils.misc </span><span class="s2">import </span><span class="s1">ensure_dir</span>
+<span class="s2">from </span><span class="s1">pip._internal.utils.setuptools_build </span><span class="s2">import </span><span class="s1">make_setuptools_egg_info_args</span>
+<span class="s2">from </span><span class="s1">pip._internal.utils.subprocess </span><span class="s2">import </span><span class="s1">call_subprocess</span>
+<span class="s2">from </span><span class="s1">pip._internal.utils.typing </span><span class="s2">import </span><span class="s1">MYPY_CHECK_RUNNING</span>
+<span class="s2">from </span><span class="s1">pip._internal.vcs </span><span class="s2">import </span><span class="s1">vcs</span>
+
+<span class="s2">if </span><span class="s1">MYPY_CHECK_RUNNING:</span>
+    <span class="s2">from </span><span class="s1">typing </span><span class="s2">import </span><span class="s1">List</span><span class="s2">, </span><span class="s1">Optional</span>
+
+    <span class="s2">from </span><span class="s1">pip._internal.build_env </span><span class="s2">import </span><span class="s1">BuildEnvironment</span>
+
+<span class="s1">logger = logging.getLogger(__name__)</span>
+
+
+<span class="s2">def </span><span class="s1">_find_egg_info(source_directory</span><span class="s2">, </span><span class="s1">is_editable):</span>
+    <span class="s3"># type: (str, bool) -&gt; str</span>
+    <span class="s0">&quot;&quot;&quot;Find an .egg-info in `source_directory`, based on `is_editable`. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">def </span><span class="s1">looks_like_virtual_env(path):</span>
+        <span class="s3"># type: (str) -&gt; bool</span>
+        <span class="s2">return </span><span class="s1">(</span>
+            <span class="s1">os.path.lexists(os.path.join(path</span><span class="s2">, </span><span class="s4">'bin'</span><span class="s2">, </span><span class="s4">'python'</span><span class="s1">)) </span><span class="s2">or</span>
+            <span class="s1">os.path.exists(os.path.join(path</span><span class="s2">, </span><span class="s4">'Scripts'</span><span class="s2">, </span><span class="s4">'Python.exe'</span><span class="s1">))</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">locate_editable_egg_info(base):</span>
+        <span class="s3"># type: (str) -&gt; List[str]</span>
+        <span class="s1">candidates = []  </span><span class="s3"># type: List[str]</span>
+        <span class="s2">for </span><span class="s1">root</span><span class="s2">, </span><span class="s1">dirs</span><span class="s2">, </span><span class="s1">files </span><span class="s2">in </span><span class="s1">os.walk(base):</span>
+            <span class="s2">for </span><span class="s1">dir_ </span><span class="s2">in </span><span class="s1">vcs.dirnames:</span>
+                <span class="s2">if </span><span class="s1">dir_ </span><span class="s2">in </span><span class="s1">dirs:</span>
+                    <span class="s1">dirs.remove(dir_)</span>
+            <span class="s3"># Iterate over a copy of ``dirs``, since mutating</span>
+            <span class="s3"># a list while iterating over it can cause trouble.</span>
+            <span class="s3"># (See https://github.com/pypa/pip/pull/462.)</span>
+            <span class="s2">for </span><span class="s1">dir_ </span><span class="s2">in </span><span class="s1">list(dirs):</span>
+                <span class="s2">if </span><span class="s1">looks_like_virtual_env(os.path.join(root</span><span class="s2">, </span><span class="s1">dir_)):</span>
+                    <span class="s1">dirs.remove(dir_)</span>
+                <span class="s3"># Also don't search through tests</span>
+                <span class="s2">elif </span><span class="s1">dir_ == </span><span class="s4">'test' </span><span class="s2">or </span><span class="s1">dir_ == </span><span class="s4">'tests'</span><span class="s1">:</span>
+                    <span class="s1">dirs.remove(dir_)</span>
+            <span class="s1">candidates.extend(os.path.join(root</span><span class="s2">, </span><span class="s1">dir_) </span><span class="s2">for </span><span class="s1">dir_ </span><span class="s2">in </span><span class="s1">dirs)</span>
+        <span class="s2">return </span><span class="s1">[f </span><span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">candidates </span><span class="s2">if </span><span class="s1">f.endswith(</span><span class="s4">'.egg-info'</span><span class="s1">)]</span>
+
+    <span class="s2">def </span><span class="s1">depth_of_directory(dir_):</span>
+        <span class="s3"># type: (str) -&gt; int</span>
+        <span class="s2">return </span><span class="s1">(</span>
+            <span class="s1">dir_.count(os.path.sep) +</span>
+            <span class="s1">(os.path.altsep </span><span class="s2">and </span><span class="s1">dir_.count(os.path.altsep) </span><span class="s2">or </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">)</span>
+
+    <span class="s1">base = source_directory</span>
+    <span class="s2">if </span><span class="s1">is_editable:</span>
+        <span class="s1">filenames = locate_editable_egg_info(base)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">base = os.path.join(base</span><span class="s2">, </span><span class="s4">'pip-egg-info'</span><span class="s1">)</span>
+        <span class="s1">filenames = os.listdir(base)</span>
+
+    <span class="s2">if not </span><span class="s1">filenames:</span>
+        <span class="s2">raise </span><span class="s1">InstallationError(</span>
+            <span class="s4">&quot;Files/directories not found in {}&quot;</span><span class="s1">.format(base)</span>
+        <span class="s1">)</span>
+
+    <span class="s3"># If we have more than one match, we pick the toplevel one.  This</span>
+    <span class="s3"># can easily be the case if there is a dist folder which contains</span>
+    <span class="s3"># an extracted tarball for testing purposes.</span>
+    <span class="s2">if </span><span class="s1">len(filenames) &gt; </span><span class="s5">1</span><span class="s1">:</span>
+        <span class="s1">filenames.sort(key=depth_of_directory)</span>
+
+    <span class="s2">return </span><span class="s1">os.path.join(base</span><span class="s2">, </span><span class="s1">filenames[</span><span class="s5">0</span><span class="s1">])</span>
+
+
+<span class="s2">def </span><span class="s1">generate_metadata(</span>
+    <span class="s1">build_env</span><span class="s2">,  </span><span class="s3"># type: BuildEnvironment</span>
+    <span class="s1">setup_py_path</span><span class="s2">,  </span><span class="s3"># type: str</span>
+    <span class="s1">source_dir</span><span class="s2">,  </span><span class="s3"># type: str</span>
+    <span class="s1">editable</span><span class="s2">,  </span><span class="s3"># type: bool</span>
+    <span class="s1">isolated</span><span class="s2">,  </span><span class="s3"># type: bool</span>
+    <span class="s1">details</span><span class="s2">,  </span><span class="s3"># type: str</span>
+<span class="s1">):</span>
+    <span class="s3"># type: (...) -&gt; str</span>
+    <span class="s0">&quot;&quot;&quot;Generate metadata using setup.py-based defacto mechanisms. 
+ 
+    Returns the generated metadata directory. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">logger.debug(</span>
+        <span class="s4">'Running setup.py (path:%s) egg_info for package %s'</span><span class="s2">,</span>
+        <span class="s1">setup_py_path</span><span class="s2">, </span><span class="s1">details</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+    <span class="s1">egg_info_dir = </span><span class="s2">None  </span><span class="s3"># type: Optional[str]</span>
+    <span class="s3"># For non-editable installs, don't put the .egg-info files at the root,</span>
+    <span class="s3"># to avoid confusion due to the source code being considered an installed</span>
+    <span class="s3"># egg.</span>
+    <span class="s2">if not </span><span class="s1">editable:</span>
+        <span class="s1">egg_info_dir = os.path.join(source_dir</span><span class="s2">, </span><span class="s4">'pip-egg-info'</span><span class="s1">)</span>
+        <span class="s3"># setuptools complains if the target directory does not exist.</span>
+        <span class="s1">ensure_dir(egg_info_dir)</span>
+
+    <span class="s1">args = make_setuptools_egg_info_args(</span>
+        <span class="s1">setup_py_path</span><span class="s2">,</span>
+        <span class="s1">egg_info_dir=egg_info_dir</span><span class="s2">,</span>
+        <span class="s1">no_user_config=isolated</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+    <span class="s2">with </span><span class="s1">build_env:</span>
+        <span class="s1">call_subprocess(</span>
+            <span class="s1">args</span><span class="s2">,</span>
+            <span class="s1">cwd=source_dir</span><span class="s2">,</span>
+            <span class="s1">command_desc=</span><span class="s4">'python setup.py egg_info'</span><span class="s2">,</span>
+        <span class="s1">)</span>
+
+    <span class="s3"># Return the .egg-info directory.</span>
+    <span class="s2">return </span><span class="s1">_find_egg_info(source_dir</span><span class="s2">, </span><span class="s1">editable)</span>
+</pre>
+</body>
+</html>

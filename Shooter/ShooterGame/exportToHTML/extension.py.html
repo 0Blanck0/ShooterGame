@@ -1,0 +1,78 @@
+<html>
+<head>
+<title>extension.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+extension.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">re</span>
+<span class="s0">import </span><span class="s1">functools</span>
+<span class="s0">import </span><span class="s1">distutils.core</span>
+<span class="s0">import </span><span class="s1">distutils.errors</span>
+<span class="s0">import </span><span class="s1">distutils.extension</span>
+
+<span class="s0">from </span><span class="s1">setuptools.extern.six.moves </span><span class="s0">import </span><span class="s1">map</span>
+
+<span class="s0">from </span><span class="s1">.monkey </span><span class="s0">import </span><span class="s1">get_unpatched</span>
+
+
+<span class="s0">def </span><span class="s1">_have_cython():</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Return True if Cython can be imported. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">cython_impl = </span><span class="s3">'Cython.Distutils.build_ext'</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s4"># from (cython_impl) import build_ext</span>
+        <span class="s1">__import__(cython_impl</span><span class="s0">, </span><span class="s1">fromlist=[</span><span class="s3">'build_ext'</span><span class="s1">]).build_ext</span>
+        <span class="s0">return True</span>
+    <span class="s0">except </span><span class="s1">Exception:</span>
+        <span class="s0">pass</span>
+    <span class="s0">return False</span>
+
+
+<span class="s4"># for compatibility</span>
+<span class="s1">have_pyrex = _have_cython</span>
+
+<span class="s1">_Extension = get_unpatched(distutils.core.Extension)</span>
+
+
+<span class="s0">class </span><span class="s1">Extension(_Extension):</span>
+    <span class="s2">&quot;&quot;&quot;Extension that uses '.c' files in place of '.pyx' files&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">sources</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw):</span>
+        <span class="s4"># The *args is needed for compatibility as calls may use positional</span>
+        <span class="s4"># arguments. py_limited_api may be set only via keyword.</span>
+        <span class="s1">self.py_limited_api = kw.pop(</span><span class="s3">&quot;py_limited_api&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+        <span class="s1">_Extension.__init__(self</span><span class="s0">, </span><span class="s1">name</span><span class="s0">, </span><span class="s1">sources</span><span class="s0">, </span><span class="s1">*args</span><span class="s0">, </span><span class="s1">**kw)</span>
+
+    <span class="s0">def </span><span class="s1">_convert_pyx_sources_to_lang(self):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Replace sources with .pyx extensions to sources with the target 
+        language extension. This mechanism allows language authors to supply 
+        pre-converted sources but to prefer the .pyx sources. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">_have_cython():</span>
+            <span class="s4"># the build has Cython, so allow it to compile the .pyx files</span>
+            <span class="s0">return</span>
+        <span class="s1">lang = self.language </span><span class="s0">or </span><span class="s3">''</span>
+        <span class="s1">target_ext = </span><span class="s3">'.cpp' </span><span class="s0">if </span><span class="s1">lang.lower() == </span><span class="s3">'c++' </span><span class="s0">else </span><span class="s3">'.c'</span>
+        <span class="s1">sub = functools.partial(re.sub</span><span class="s0">, </span><span class="s3">'.pyx$'</span><span class="s0">, </span><span class="s1">target_ext)</span>
+        <span class="s1">self.sources = list(map(sub</span><span class="s0">, </span><span class="s1">self.sources))</span>
+
+
+<span class="s0">class </span><span class="s1">Library(Extension):</span>
+    <span class="s2">&quot;&quot;&quot;Just like a regular Extension, but built as a library instead&quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

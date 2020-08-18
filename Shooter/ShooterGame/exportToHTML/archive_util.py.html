@@ -1,0 +1,197 @@
+<html>
+<head>
+<title>archive_util.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6a8759;}
+.s4 { color: #808080;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+archive_util.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;Utilities for extracting common archive formats&quot;&quot;&quot;</span>
+
+<span class="s2">import </span><span class="s1">zipfile</span>
+<span class="s2">import </span><span class="s1">tarfile</span>
+<span class="s2">import </span><span class="s1">os</span>
+<span class="s2">import </span><span class="s1">shutil</span>
+<span class="s2">import </span><span class="s1">posixpath</span>
+<span class="s2">import </span><span class="s1">contextlib</span>
+<span class="s2">from </span><span class="s1">distutils.errors </span><span class="s2">import </span><span class="s1">DistutilsError</span>
+
+<span class="s2">from </span><span class="s1">pkg_resources </span><span class="s2">import </span><span class="s1">ensure_directory</span>
+
+<span class="s1">__all__ = [</span>
+    <span class="s3">&quot;unpack_archive&quot;</span><span class="s2">, </span><span class="s3">&quot;unpack_zipfile&quot;</span><span class="s2">, </span><span class="s3">&quot;unpack_tarfile&quot;</span><span class="s2">, </span><span class="s3">&quot;default_filter&quot;</span><span class="s2">,</span>
+    <span class="s3">&quot;UnrecognizedFormat&quot;</span><span class="s2">, </span><span class="s3">&quot;extraction_drivers&quot;</span><span class="s2">, </span><span class="s3">&quot;unpack_directory&quot;</span><span class="s2">,</span>
+<span class="s1">]</span>
+
+
+<span class="s2">class </span><span class="s1">UnrecognizedFormat(DistutilsError):</span>
+    <span class="s0">&quot;&quot;&quot;Couldn't recognize the archive type&quot;&quot;&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">default_filter(src</span><span class="s2">, </span><span class="s1">dst):</span>
+    <span class="s0">&quot;&quot;&quot;The default progress/filter callback; returns True for all files&quot;&quot;&quot;</span>
+    <span class="s2">return </span><span class="s1">dst</span>
+
+
+<span class="s2">def </span><span class="s1">unpack_archive(</span>
+        <span class="s1">filename</span><span class="s2">, </span><span class="s1">extract_dir</span><span class="s2">, </span><span class="s1">progress_filter=default_filter</span><span class="s2">,</span>
+        <span class="s1">drivers=</span><span class="s2">None</span><span class="s1">):</span>
+    <span class="s0">&quot;&quot;&quot;Unpack `filename` to `extract_dir`, or raise ``UnrecognizedFormat`` 
+ 
+    `progress_filter` is a function taking two arguments: a source path 
+    internal to the archive ('/'-separated), and a filesystem path where it 
+    will be extracted.  The callback must return the desired extract path 
+    (which may be the same as the one passed in), or else ``None`` to skip 
+    that file or directory.  The callback can thus be used to report on the 
+    progress of the extraction, as well as to filter the items extracted or 
+    alter their extraction paths. 
+ 
+    `drivers`, if supplied, must be a non-empty sequence of functions with the 
+    same signature as this function (minus the `drivers` argument), that raise 
+    ``UnrecognizedFormat`` if they do not support extracting the designated 
+    archive type.  The `drivers` are tried in sequence until one is found that 
+    does not raise an error, or until all are exhausted (in which case 
+    ``UnrecognizedFormat`` is raised).  If you do not supply a sequence of 
+    drivers, the module's ``extraction_drivers`` constant will be used, which 
+    means that ``unpack_zipfile`` and ``unpack_tarfile`` will be tried, in that 
+    order. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">for </span><span class="s1">driver </span><span class="s2">in </span><span class="s1">drivers </span><span class="s2">or </span><span class="s1">extraction_drivers:</span>
+        <span class="s2">try</span><span class="s1">:</span>
+            <span class="s1">driver(filename</span><span class="s2">, </span><span class="s1">extract_dir</span><span class="s2">, </span><span class="s1">progress_filter)</span>
+        <span class="s2">except </span><span class="s1">UnrecognizedFormat:</span>
+            <span class="s2">continue</span>
+        <span class="s2">else</span><span class="s1">:</span>
+            <span class="s2">return</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s2">raise </span><span class="s1">UnrecognizedFormat(</span>
+            <span class="s3">&quot;Not a recognized archive type: %s&quot; </span><span class="s1">% filename</span>
+        <span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">unpack_directory(filename</span><span class="s2">, </span><span class="s1">extract_dir</span><span class="s2">, </span><span class="s1">progress_filter=default_filter):</span>
+    <span class="s0">&quot;&quot;&quot;&quot;Unpack&quot; a directory, using the same interface as for archives 
+ 
+    Raises ``UnrecognizedFormat`` if `filename` is not a directory 
+    &quot;&quot;&quot;</span>
+    <span class="s2">if not </span><span class="s1">os.path.isdir(filename):</span>
+        <span class="s2">raise </span><span class="s1">UnrecognizedFormat(</span><span class="s3">&quot;%s is not a directory&quot; </span><span class="s1">% filename)</span>
+
+    <span class="s1">paths = {</span>
+        <span class="s1">filename: (</span><span class="s3">''</span><span class="s2">, </span><span class="s1">extract_dir)</span><span class="s2">,</span>
+    <span class="s1">}</span>
+    <span class="s2">for </span><span class="s1">base</span><span class="s2">, </span><span class="s1">dirs</span><span class="s2">, </span><span class="s1">files </span><span class="s2">in </span><span class="s1">os.walk(filename):</span>
+        <span class="s1">src</span><span class="s2">, </span><span class="s1">dst = paths[base]</span>
+        <span class="s2">for </span><span class="s1">d </span><span class="s2">in </span><span class="s1">dirs:</span>
+            <span class="s1">paths[os.path.join(base</span><span class="s2">, </span><span class="s1">d)] = src + d + </span><span class="s3">'/'</span><span class="s2">, </span><span class="s1">os.path.join(dst</span><span class="s2">, </span><span class="s1">d)</span>
+        <span class="s2">for </span><span class="s1">f </span><span class="s2">in </span><span class="s1">files:</span>
+            <span class="s1">target = os.path.join(dst</span><span class="s2">, </span><span class="s1">f)</span>
+            <span class="s1">target = progress_filter(src + f</span><span class="s2">, </span><span class="s1">target)</span>
+            <span class="s2">if not </span><span class="s1">target:</span>
+                <span class="s4"># skip non-files</span>
+                <span class="s2">continue</span>
+            <span class="s1">ensure_directory(target)</span>
+            <span class="s1">f = os.path.join(base</span><span class="s2">, </span><span class="s1">f)</span>
+            <span class="s1">shutil.copyfile(f</span><span class="s2">, </span><span class="s1">target)</span>
+            <span class="s1">shutil.copystat(f</span><span class="s2">, </span><span class="s1">target)</span>
+
+
+<span class="s2">def </span><span class="s1">unpack_zipfile(filename</span><span class="s2">, </span><span class="s1">extract_dir</span><span class="s2">, </span><span class="s1">progress_filter=default_filter):</span>
+    <span class="s0">&quot;&quot;&quot;Unpack zip `filename` to `extract_dir` 
+ 
+    Raises ``UnrecognizedFormat`` if `filename` is not a zipfile (as determined 
+    by ``zipfile.is_zipfile()``).  See ``unpack_archive()`` for an explanation 
+    of the `progress_filter` argument. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s2">if not </span><span class="s1">zipfile.is_zipfile(filename):</span>
+        <span class="s2">raise </span><span class="s1">UnrecognizedFormat(</span><span class="s3">&quot;%s is not a zip file&quot; </span><span class="s1">% (filename</span><span class="s2">,</span><span class="s1">))</span>
+
+    <span class="s2">with </span><span class="s1">zipfile.ZipFile(filename) </span><span class="s2">as </span><span class="s1">z:</span>
+        <span class="s2">for </span><span class="s1">info </span><span class="s2">in </span><span class="s1">z.infolist():</span>
+            <span class="s1">name = info.filename</span>
+
+            <span class="s4"># don't extract absolute paths or ones with .. in them</span>
+            <span class="s2">if </span><span class="s1">name.startswith(</span><span class="s3">'/'</span><span class="s1">) </span><span class="s2">or </span><span class="s3">'..' </span><span class="s2">in </span><span class="s1">name.split(</span><span class="s3">'/'</span><span class="s1">):</span>
+                <span class="s2">continue</span>
+
+            <span class="s1">target = os.path.join(extract_dir</span><span class="s2">, </span><span class="s1">*name.split(</span><span class="s3">'/'</span><span class="s1">))</span>
+            <span class="s1">target = progress_filter(name</span><span class="s2">, </span><span class="s1">target)</span>
+            <span class="s2">if not </span><span class="s1">target:</span>
+                <span class="s2">continue</span>
+            <span class="s2">if </span><span class="s1">name.endswith(</span><span class="s3">'/'</span><span class="s1">):</span>
+                <span class="s4"># directory</span>
+                <span class="s1">ensure_directory(target)</span>
+            <span class="s2">else</span><span class="s1">:</span>
+                <span class="s4"># file</span>
+                <span class="s1">ensure_directory(target)</span>
+                <span class="s1">data = z.read(info.filename)</span>
+                <span class="s2">with </span><span class="s1">open(target</span><span class="s2">, </span><span class="s3">'wb'</span><span class="s1">) </span><span class="s2">as </span><span class="s1">f:</span>
+                    <span class="s1">f.write(data)</span>
+            <span class="s1">unix_attributes = info.external_attr &gt;&gt; </span><span class="s5">16</span>
+            <span class="s2">if </span><span class="s1">unix_attributes:</span>
+                <span class="s1">os.chmod(target</span><span class="s2">, </span><span class="s1">unix_attributes)</span>
+
+
+<span class="s2">def </span><span class="s1">unpack_tarfile(filename</span><span class="s2">, </span><span class="s1">extract_dir</span><span class="s2">, </span><span class="s1">progress_filter=default_filter):</span>
+    <span class="s0">&quot;&quot;&quot;Unpack tar/tar.gz/tar.bz2 `filename` to `extract_dir` 
+ 
+    Raises ``UnrecognizedFormat`` if `filename` is not a tarfile (as determined 
+    by ``tarfile.open()``).  See ``unpack_archive()`` for an explanation 
+    of the `progress_filter` argument. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">tarobj = tarfile.open(filename)</span>
+    <span class="s2">except </span><span class="s1">tarfile.TarError:</span>
+        <span class="s2">raise </span><span class="s1">UnrecognizedFormat(</span>
+            <span class="s3">&quot;%s is not a compressed or uncompressed tar file&quot; </span><span class="s1">% (filename</span><span class="s2">,</span><span class="s1">)</span>
+        <span class="s1">)</span>
+    <span class="s2">with </span><span class="s1">contextlib.closing(tarobj):</span>
+        <span class="s4"># don't do any chowning!</span>
+        <span class="s1">tarobj.chown = </span><span class="s2">lambda </span><span class="s1">*args: </span><span class="s2">None</span>
+        <span class="s2">for </span><span class="s1">member </span><span class="s2">in </span><span class="s1">tarobj:</span>
+            <span class="s1">name = member.name</span>
+            <span class="s4"># don't extract absolute paths or ones with .. in them</span>
+            <span class="s2">if not </span><span class="s1">name.startswith(</span><span class="s3">'/'</span><span class="s1">) </span><span class="s2">and </span><span class="s3">'..' </span><span class="s2">not in </span><span class="s1">name.split(</span><span class="s3">'/'</span><span class="s1">):</span>
+                <span class="s1">prelim_dst = os.path.join(extract_dir</span><span class="s2">, </span><span class="s1">*name.split(</span><span class="s3">'/'</span><span class="s1">))</span>
+
+                <span class="s4"># resolve any links and to extract the link targets as normal</span>
+                <span class="s4"># files</span>
+                <span class="s2">while </span><span class="s1">member </span><span class="s2">is not None and </span><span class="s1">(</span>
+                        <span class="s1">member.islnk() </span><span class="s2">or </span><span class="s1">member.issym()):</span>
+                    <span class="s1">linkpath = member.linkname</span>
+                    <span class="s2">if </span><span class="s1">member.issym():</span>
+                        <span class="s1">base = posixpath.dirname(member.name)</span>
+                        <span class="s1">linkpath = posixpath.join(base</span><span class="s2">, </span><span class="s1">linkpath)</span>
+                        <span class="s1">linkpath = posixpath.normpath(linkpath)</span>
+                    <span class="s1">member = tarobj._getmember(linkpath)</span>
+
+                <span class="s2">if </span><span class="s1">member </span><span class="s2">is not None and </span><span class="s1">(member.isfile() </span><span class="s2">or </span><span class="s1">member.isdir()):</span>
+                    <span class="s1">final_dst = progress_filter(name</span><span class="s2">, </span><span class="s1">prelim_dst)</span>
+                    <span class="s2">if </span><span class="s1">final_dst:</span>
+                        <span class="s2">if </span><span class="s1">final_dst.endswith(os.sep):</span>
+                            <span class="s1">final_dst = final_dst[:-</span><span class="s5">1</span><span class="s1">]</span>
+                        <span class="s2">try</span><span class="s1">:</span>
+                            <span class="s4"># XXX Ugh</span>
+                            <span class="s1">tarobj._extract_member(member</span><span class="s2">, </span><span class="s1">final_dst)</span>
+                        <span class="s2">except </span><span class="s1">tarfile.ExtractError:</span>
+                            <span class="s4"># chown/chmod/mkfifo/mknode/makedev failed</span>
+                            <span class="s2">pass</span>
+        <span class="s2">return True</span>
+
+
+<span class="s1">extraction_drivers = unpack_directory</span><span class="s2">, </span><span class="s1">unpack_zipfile</span><span class="s2">, </span><span class="s1">unpack_tarfile</span>
+</pre>
+</body>
+</html>

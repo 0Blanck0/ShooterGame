@@ -1,0 +1,426 @@
+<html>
+<head>
+<title>tags.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+.s5 { color: #629755; font-style: italic;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+tags.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># This file is dual licensed under the terms of the Apache License, Version</span>
+<span class="s0"># 2.0, and the BSD License. See the LICENSE file in the root of this repository</span>
+<span class="s0"># for complete details.</span>
+
+<span class="s2">from </span><span class="s1">__future__ </span><span class="s2">import </span><span class="s1">absolute_import</span>
+
+<span class="s2">import </span><span class="s1">distutils.util</span>
+
+<span class="s2">try</span><span class="s1">:</span>
+    <span class="s2">from </span><span class="s1">importlib.machinery </span><span class="s2">import </span><span class="s1">EXTENSION_SUFFIXES</span>
+<span class="s2">except </span><span class="s1">ImportError:  </span><span class="s0"># pragma: no cover</span>
+    <span class="s2">import </span><span class="s1">imp</span>
+
+    <span class="s1">EXTENSION_SUFFIXES = [x[</span><span class="s3">0</span><span class="s1">] </span><span class="s2">for </span><span class="s1">x </span><span class="s2">in </span><span class="s1">imp.get_suffixes()]</span>
+    <span class="s2">del </span><span class="s1">imp</span>
+<span class="s2">import </span><span class="s1">platform</span>
+<span class="s2">import </span><span class="s1">re</span>
+<span class="s2">import </span><span class="s1">sys</span>
+<span class="s2">import </span><span class="s1">sysconfig</span>
+<span class="s2">import </span><span class="s1">warnings</span>
+
+
+<span class="s1">INTERPRETER_SHORT_NAMES = {</span>
+    <span class="s4">&quot;python&quot;</span><span class="s1">: </span><span class="s4">&quot;py&quot;</span><span class="s2">,  </span><span class="s0"># Generic.</span>
+    <span class="s4">&quot;cpython&quot;</span><span class="s1">: </span><span class="s4">&quot;cp&quot;</span><span class="s2">,</span>
+    <span class="s4">&quot;pypy&quot;</span><span class="s1">: </span><span class="s4">&quot;pp&quot;</span><span class="s2">,</span>
+    <span class="s4">&quot;ironpython&quot;</span><span class="s1">: </span><span class="s4">&quot;ip&quot;</span><span class="s2">,</span>
+    <span class="s4">&quot;jython&quot;</span><span class="s1">: </span><span class="s4">&quot;jy&quot;</span><span class="s2">,</span>
+<span class="s1">}</span>
+
+
+<span class="s1">_32_BIT_INTERPRETER = sys.maxsize &lt;= </span><span class="s3">2 </span><span class="s1">** </span><span class="s3">32</span>
+
+
+<span class="s2">class </span><span class="s1">Tag(object):</span>
+
+    <span class="s1">__slots__ = [</span><span class="s4">&quot;_interpreter&quot;</span><span class="s2">, </span><span class="s4">&quot;_abi&quot;</span><span class="s2">, </span><span class="s4">&quot;_platform&quot;</span><span class="s1">]</span>
+
+    <span class="s2">def </span><span class="s1">__init__(self</span><span class="s2">, </span><span class="s1">interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platform):</span>
+        <span class="s1">self._interpreter = interpreter.lower()</span>
+        <span class="s1">self._abi = abi.lower()</span>
+        <span class="s1">self._platform = platform.lower()</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">interpreter(self):</span>
+        <span class="s2">return </span><span class="s1">self._interpreter</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">abi(self):</span>
+        <span class="s2">return </span><span class="s1">self._abi</span>
+
+    <span class="s1">@property</span>
+    <span class="s2">def </span><span class="s1">platform(self):</span>
+        <span class="s2">return </span><span class="s1">self._platform</span>
+
+    <span class="s2">def </span><span class="s1">__eq__(self</span><span class="s2">, </span><span class="s1">other):</span>
+        <span class="s2">return </span><span class="s1">(</span>
+            <span class="s1">(self.platform == other.platform)</span>
+            <span class="s2">and </span><span class="s1">(self.abi == other.abi)</span>
+            <span class="s2">and </span><span class="s1">(self.interpreter == other.interpreter)</span>
+        <span class="s1">)</span>
+
+    <span class="s2">def </span><span class="s1">__hash__(self):</span>
+        <span class="s2">return </span><span class="s1">hash((self._interpreter</span><span class="s2">, </span><span class="s1">self._abi</span><span class="s2">, </span><span class="s1">self._platform))</span>
+
+    <span class="s2">def </span><span class="s1">__str__(self):</span>
+        <span class="s2">return </span><span class="s4">&quot;{}-{}-{}&quot;</span><span class="s1">.format(self._interpreter</span><span class="s2">, </span><span class="s1">self._abi</span><span class="s2">, </span><span class="s1">self._platform)</span>
+
+    <span class="s2">def </span><span class="s1">__repr__(self):</span>
+        <span class="s2">return </span><span class="s4">&quot;&lt;{self} @ {self_id}&gt;&quot;</span><span class="s1">.format(self=self</span><span class="s2">, </span><span class="s1">self_id=id(self))</span>
+
+
+<span class="s2">def </span><span class="s1">parse_tag(tag):</span>
+    <span class="s1">tags = set()</span>
+    <span class="s1">interpreters</span><span class="s2">, </span><span class="s1">abis</span><span class="s2">, </span><span class="s1">platforms = tag.split(</span><span class="s4">&quot;-&quot;</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s1">interpreter </span><span class="s2">in </span><span class="s1">interpreters.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">):</span>
+        <span class="s2">for </span><span class="s1">abi </span><span class="s2">in </span><span class="s1">abis.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">):</span>
+            <span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">):</span>
+                <span class="s1">tags.add(Tag(interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platform_))</span>
+    <span class="s2">return </span><span class="s1">frozenset(tags)</span>
+
+
+<span class="s2">def </span><span class="s1">_normalize_string(string):</span>
+    <span class="s2">return </span><span class="s1">string.replace(</span><span class="s4">&quot;.&quot;</span><span class="s2">, </span><span class="s4">&quot;_&quot;</span><span class="s1">).replace(</span><span class="s4">&quot;-&quot;</span><span class="s2">, </span><span class="s4">&quot;_&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_cpython_interpreter(py_version):</span>
+    <span class="s0"># TODO: Is using py_version_nodot for interpreter version critical?</span>
+    <span class="s2">return </span><span class="s4">&quot;cp{major}{minor}&quot;</span><span class="s1">.format(major=py_version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">, </span><span class="s1">minor=py_version[</span><span class="s3">1</span><span class="s1">])</span>
+
+
+<span class="s2">def </span><span class="s1">_cpython_abis(py_version):</span>
+    <span class="s1">abis = []</span>
+    <span class="s1">version = </span><span class="s4">&quot;{}{}&quot;</span><span class="s1">.format(*py_version[:</span><span class="s3">2</span><span class="s1">])</span>
+    <span class="s1">debug = pymalloc = ucs4 = </span><span class="s4">&quot;&quot;</span>
+    <span class="s1">with_debug = sysconfig.get_config_var(</span><span class="s4">&quot;Py_DEBUG&quot;</span><span class="s1">)</span>
+    <span class="s1">has_refcount = hasattr(sys</span><span class="s2">, </span><span class="s4">&quot;gettotalrefcount&quot;</span><span class="s1">)</span>
+    <span class="s0"># Windows doesn't set Py_DEBUG, so checking for support of debug-compiled</span>
+    <span class="s0"># extension modules is the best option.</span>
+    <span class="s0"># https://github.com/pypa/pip/issues/3383#issuecomment-173267692</span>
+    <span class="s1">has_ext = </span><span class="s4">&quot;_d.pyd&quot; </span><span class="s2">in </span><span class="s1">EXTENSION_SUFFIXES</span>
+    <span class="s2">if </span><span class="s1">with_debug </span><span class="s2">or </span><span class="s1">(with_debug </span><span class="s2">is None and </span><span class="s1">(has_refcount </span><span class="s2">or </span><span class="s1">has_ext)):</span>
+        <span class="s1">debug = </span><span class="s4">&quot;d&quot;</span>
+    <span class="s2">if </span><span class="s1">py_version &lt; (</span><span class="s3">3</span><span class="s2">, </span><span class="s3">8</span><span class="s1">):</span>
+        <span class="s1">with_pymalloc = sysconfig.get_config_var(</span><span class="s4">&quot;WITH_PYMALLOC&quot;</span><span class="s1">)</span>
+        <span class="s2">if </span><span class="s1">with_pymalloc </span><span class="s2">or </span><span class="s1">with_pymalloc </span><span class="s2">is None</span><span class="s1">:</span>
+            <span class="s1">pymalloc = </span><span class="s4">&quot;m&quot;</span>
+        <span class="s2">if </span><span class="s1">py_version &lt; (</span><span class="s3">3</span><span class="s2">, </span><span class="s3">3</span><span class="s1">):</span>
+            <span class="s1">unicode_size = sysconfig.get_config_var(</span><span class="s4">&quot;Py_UNICODE_SIZE&quot;</span><span class="s1">)</span>
+            <span class="s2">if </span><span class="s1">unicode_size == </span><span class="s3">4 </span><span class="s2">or </span><span class="s1">(</span>
+                <span class="s1">unicode_size </span><span class="s2">is None and </span><span class="s1">sys.maxunicode == </span><span class="s3">0x10FFFF</span>
+            <span class="s1">):</span>
+                <span class="s1">ucs4 = </span><span class="s4">&quot;u&quot;</span>
+    <span class="s2">elif </span><span class="s1">debug:</span>
+        <span class="s0"># Debug builds can also load &quot;normal&quot; extension modules.</span>
+        <span class="s0"># We can also assume no UCS-4 or pymalloc requirement.</span>
+        <span class="s1">abis.append(</span><span class="s4">&quot;cp{version}&quot;</span><span class="s1">.format(version=version))</span>
+    <span class="s1">abis.insert(</span>
+        <span class="s3">0</span><span class="s2">,</span>
+        <span class="s4">&quot;cp{version}{debug}{pymalloc}{ucs4}&quot;</span><span class="s1">.format(</span>
+            <span class="s1">version=version</span><span class="s2">, </span><span class="s1">debug=debug</span><span class="s2">, </span><span class="s1">pymalloc=pymalloc</span><span class="s2">, </span><span class="s1">ucs4=ucs4</span>
+        <span class="s1">)</span><span class="s2">,</span>
+    <span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">abis</span>
+
+
+<span class="s2">def </span><span class="s1">_cpython_tags(py_version</span><span class="s2">, </span><span class="s1">interpreter</span><span class="s2">, </span><span class="s1">abis</span><span class="s2">, </span><span class="s1">platforms):</span>
+    <span class="s2">for </span><span class="s1">abi </span><span class="s2">in </span><span class="s1">abis:</span>
+        <span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms:</span>
+            <span class="s2">yield </span><span class="s1">Tag(interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platform_)</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">(Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;abi3&quot;</span><span class="s2">, </span><span class="s1">platform_) </span><span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">(Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s1">platform_) </span><span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s0"># PEP 384 was first implemented in Python 3.2.</span>
+    <span class="s2">for </span><span class="s1">minor_version </span><span class="s2">in </span><span class="s1">range(py_version[</span><span class="s3">1</span><span class="s1">] - </span><span class="s3">1</span><span class="s2">, </span><span class="s3">1</span><span class="s2">, </span><span class="s1">-</span><span class="s3">1</span><span class="s1">):</span>
+        <span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms:</span>
+            <span class="s1">interpreter = </span><span class="s4">&quot;cp{major}{minor}&quot;</span><span class="s1">.format(</span>
+                <span class="s1">major=py_version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">, </span><span class="s1">minor=minor_version</span>
+            <span class="s1">)</span>
+            <span class="s2">yield </span><span class="s1">Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;abi3&quot;</span><span class="s2">, </span><span class="s1">platform_)</span>
+
+
+<span class="s2">def </span><span class="s1">_pypy_interpreter():</span>
+    <span class="s2">return </span><span class="s4">&quot;pp{py_major}{pypy_major}{pypy_minor}&quot;</span><span class="s1">.format(</span>
+        <span class="s1">py_major=sys.version_info[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">,</span>
+        <span class="s1">pypy_major=sys.pypy_version_info.major</span><span class="s2">,</span>
+        <span class="s1">pypy_minor=sys.pypy_version_info.minor</span><span class="s2">,</span>
+    <span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_generic_abi():</span>
+    <span class="s1">abi = sysconfig.get_config_var(</span><span class="s4">&quot;SOABI&quot;</span><span class="s1">)</span>
+    <span class="s2">if </span><span class="s1">abi:</span>
+        <span class="s2">return </span><span class="s1">_normalize_string(abi)</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s2">return </span><span class="s4">&quot;none&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">_pypy_tags(py_version</span><span class="s2">, </span><span class="s1">interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platforms):</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">(Tag(interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platform) </span><span class="s2">for </span><span class="s1">platform </span><span class="s2">in </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">(Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s1">platform) </span><span class="s2">for </span><span class="s1">platform </span><span class="s2">in </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+
+
+<span class="s2">def </span><span class="s1">_generic_tags(interpreter</span><span class="s2">, </span><span class="s1">py_version</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platforms):</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">(Tag(interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platform) </span><span class="s2">for </span><span class="s1">platform </span><span class="s2">in </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">if </span><span class="s1">abi != </span><span class="s4">&quot;none&quot;</span><span class="s1">:</span>
+        <span class="s1">tags = (Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s1">platform_) </span><span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms)</span>
+        <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">tags:</span>
+            <span class="s2">yield </span><span class="s1">tag</span>
+
+
+<span class="s2">def </span><span class="s1">_py_interpreter_range(py_version):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Yield Python versions in descending order. 
+ 
+    After the latest version, the major-only version will be yielded, and then 
+    all following versions up to 'end'. 
+    &quot;&quot;&quot;</span>
+    <span class="s2">yield </span><span class="s4">&quot;py{major}{minor}&quot;</span><span class="s1">.format(major=py_version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">, </span><span class="s1">minor=py_version[</span><span class="s3">1</span><span class="s1">])</span>
+    <span class="s2">yield </span><span class="s4">&quot;py{major}&quot;</span><span class="s1">.format(major=py_version[</span><span class="s3">0</span><span class="s1">])</span>
+    <span class="s2">for </span><span class="s1">minor </span><span class="s2">in </span><span class="s1">range(py_version[</span><span class="s3">1</span><span class="s1">] - </span><span class="s3">1</span><span class="s2">, </span><span class="s1">-</span><span class="s3">1</span><span class="s2">, </span><span class="s1">-</span><span class="s3">1</span><span class="s1">):</span>
+        <span class="s2">yield </span><span class="s4">&quot;py{major}{minor}&quot;</span><span class="s1">.format(major=py_version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">, </span><span class="s1">minor=minor)</span>
+
+
+<span class="s2">def </span><span class="s1">_independent_tags(interpreter</span><span class="s2">, </span><span class="s1">py_version</span><span class="s2">, </span><span class="s1">platforms):</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Return the sequence of tags that are consistent across implementations. 
+ 
+    The tags consist of: 
+    - py*-none-&lt;platform&gt; 
+    - &lt;interpreter&gt;-none-any 
+    - py*-none-any 
+    &quot;&quot;&quot;</span>
+    <span class="s2">for </span><span class="s1">version </span><span class="s2">in </span><span class="s1">_py_interpreter_range(py_version):</span>
+        <span class="s2">for </span><span class="s1">platform_ </span><span class="s2">in </span><span class="s1">platforms:</span>
+            <span class="s2">yield </span><span class="s1">Tag(version</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s1">platform_)</span>
+    <span class="s2">yield </span><span class="s1">Tag(interpreter</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s4">&quot;any&quot;</span><span class="s1">)</span>
+    <span class="s2">for </span><span class="s1">version </span><span class="s2">in </span><span class="s1">_py_interpreter_range(py_version):</span>
+        <span class="s2">yield </span><span class="s1">Tag(version</span><span class="s2">, </span><span class="s4">&quot;none&quot;</span><span class="s2">, </span><span class="s4">&quot;any&quot;</span><span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_mac_arch(arch</span><span class="s2">, </span><span class="s1">is_32bit=_32_BIT_INTERPRETER):</span>
+    <span class="s2">if not </span><span class="s1">is_32bit:</span>
+        <span class="s2">return </span><span class="s1">arch</span>
+
+    <span class="s2">if </span><span class="s1">arch.startswith(</span><span class="s4">&quot;ppc&quot;</span><span class="s1">):</span>
+        <span class="s2">return </span><span class="s4">&quot;ppc&quot;</span>
+
+    <span class="s2">return </span><span class="s4">&quot;i386&quot;</span>
+
+
+<span class="s2">def </span><span class="s1">_mac_binary_formats(version</span><span class="s2">, </span><span class="s1">cpu_arch):</span>
+    <span class="s1">formats = [cpu_arch]</span>
+    <span class="s2">if </span><span class="s1">cpu_arch == </span><span class="s4">&quot;x86_64&quot;</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">version &lt; (</span><span class="s3">10</span><span class="s2">, </span><span class="s3">4</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">[]</span>
+        <span class="s1">formats.extend([</span><span class="s4">&quot;intel&quot;</span><span class="s2">, </span><span class="s4">&quot;fat64&quot;</span><span class="s2">, </span><span class="s4">&quot;fat32&quot;</span><span class="s1">])</span>
+
+    <span class="s2">elif </span><span class="s1">cpu_arch == </span><span class="s4">&quot;i386&quot;</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">version &lt; (</span><span class="s3">10</span><span class="s2">, </span><span class="s3">4</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">[]</span>
+        <span class="s1">formats.extend([</span><span class="s4">&quot;intel&quot;</span><span class="s2">, </span><span class="s4">&quot;fat32&quot;</span><span class="s2">, </span><span class="s4">&quot;fat&quot;</span><span class="s1">])</span>
+
+    <span class="s2">elif </span><span class="s1">cpu_arch == </span><span class="s4">&quot;ppc64&quot;</span><span class="s1">:</span>
+        <span class="s0"># TODO: Need to care about 32-bit PPC for ppc64 through 10.2?</span>
+        <span class="s2">if </span><span class="s1">version &gt; (</span><span class="s3">10</span><span class="s2">, </span><span class="s3">5</span><span class="s1">) </span><span class="s2">or </span><span class="s1">version &lt; (</span><span class="s3">10</span><span class="s2">, </span><span class="s3">4</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">[]</span>
+        <span class="s1">formats.append(</span><span class="s4">&quot;fat64&quot;</span><span class="s1">)</span>
+
+    <span class="s2">elif </span><span class="s1">cpu_arch == </span><span class="s4">&quot;ppc&quot;</span><span class="s1">:</span>
+        <span class="s2">if </span><span class="s1">version &gt; (</span><span class="s3">10</span><span class="s2">, </span><span class="s3">6</span><span class="s1">):</span>
+            <span class="s2">return </span><span class="s1">[]</span>
+        <span class="s1">formats.extend([</span><span class="s4">&quot;fat32&quot;</span><span class="s2">, </span><span class="s4">&quot;fat&quot;</span><span class="s1">])</span>
+
+    <span class="s1">formats.append(</span><span class="s4">&quot;universal&quot;</span><span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">formats</span>
+
+
+<span class="s2">def </span><span class="s1">_mac_platforms(version=</span><span class="s2">None, </span><span class="s1">arch=</span><span class="s2">None</span><span class="s1">):</span>
+    <span class="s1">version_str</span><span class="s2">, </span><span class="s1">_</span><span class="s2">, </span><span class="s1">cpu_arch = platform.mac_ver()</span>
+    <span class="s2">if </span><span class="s1">version </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s1">version = tuple(map(int</span><span class="s2">, </span><span class="s1">version_str.split(</span><span class="s4">&quot;.&quot;</span><span class="s1">)[:</span><span class="s3">2</span><span class="s1">]))</span>
+    <span class="s2">if </span><span class="s1">arch </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s1">arch = _mac_arch(cpu_arch)</span>
+    <span class="s1">platforms = []</span>
+    <span class="s2">for </span><span class="s1">minor_version </span><span class="s2">in </span><span class="s1">range(version[</span><span class="s3">1</span><span class="s1">]</span><span class="s2">, </span><span class="s1">-</span><span class="s3">1</span><span class="s2">, </span><span class="s1">-</span><span class="s3">1</span><span class="s1">):</span>
+        <span class="s1">compat_version = version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">, </span><span class="s1">minor_version</span>
+        <span class="s1">binary_formats = _mac_binary_formats(compat_version</span><span class="s2">, </span><span class="s1">arch)</span>
+        <span class="s2">for </span><span class="s1">binary_format </span><span class="s2">in </span><span class="s1">binary_formats:</span>
+            <span class="s1">platforms.append(</span>
+                <span class="s4">&quot;macosx_{major}_{minor}_{binary_format}&quot;</span><span class="s1">.format(</span>
+                    <span class="s1">major=compat_version[</span><span class="s3">0</span><span class="s1">]</span><span class="s2">,</span>
+                    <span class="s1">minor=compat_version[</span><span class="s3">1</span><span class="s1">]</span><span class="s2">,</span>
+                    <span class="s1">binary_format=binary_format</span><span class="s2">,</span>
+                <span class="s1">)</span>
+            <span class="s1">)</span>
+    <span class="s2">return </span><span class="s1">platforms</span>
+
+
+<span class="s0"># From PEP 513.</span>
+<span class="s2">def </span><span class="s1">_is_manylinux_compatible(name</span><span class="s2">, </span><span class="s1">glibc_version):</span>
+    <span class="s0"># Check for presence of _manylinux module.</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s2">import </span><span class="s1">_manylinux</span>
+
+        <span class="s2">return </span><span class="s1">bool(getattr(_manylinux</span><span class="s2">, </span><span class="s1">name + </span><span class="s4">&quot;_compatible&quot;</span><span class="s1">))</span>
+    <span class="s2">except </span><span class="s1">(ImportError</span><span class="s2">, </span><span class="s1">AttributeError):</span>
+        <span class="s0"># Fall through to heuristic check below.</span>
+        <span class="s2">pass</span>
+
+    <span class="s2">return </span><span class="s1">_have_compatible_glibc(*glibc_version)</span>
+
+
+<span class="s2">def </span><span class="s1">_glibc_version_string():</span>
+    <span class="s0"># Returns glibc version string, or None if not using glibc.</span>
+    <span class="s2">import </span><span class="s1">ctypes</span>
+
+    <span class="s0"># ctypes.CDLL(None) internally calls dlopen(NULL), and as the dlopen</span>
+    <span class="s0"># manpage says, &quot;If filename is NULL, then the returned handle is for the</span>
+    <span class="s0"># main program&quot;. This way we can let the linker do the work to figure out</span>
+    <span class="s0"># which libc our process is actually using.</span>
+    <span class="s1">process_namespace = ctypes.CDLL(</span><span class="s2">None</span><span class="s1">)</span>
+    <span class="s2">try</span><span class="s1">:</span>
+        <span class="s1">gnu_get_libc_version = process_namespace.gnu_get_libc_version</span>
+    <span class="s2">except </span><span class="s1">AttributeError:</span>
+        <span class="s0"># Symbol doesn't exist -&gt; therefore, we are not linked to</span>
+        <span class="s0"># glibc.</span>
+        <span class="s2">return None</span>
+
+    <span class="s0"># Call gnu_get_libc_version, which returns a string like &quot;2.5&quot;</span>
+    <span class="s1">gnu_get_libc_version.restype = ctypes.c_char_p</span>
+    <span class="s1">version_str = gnu_get_libc_version()</span>
+    <span class="s0"># py2 / py3 compatibility:</span>
+    <span class="s2">if not </span><span class="s1">isinstance(version_str</span><span class="s2">, </span><span class="s1">str):</span>
+        <span class="s1">version_str = version_str.decode(</span><span class="s4">&quot;ascii&quot;</span><span class="s1">)</span>
+
+    <span class="s2">return </span><span class="s1">version_str</span>
+
+
+<span class="s0"># Separated out from have_compatible_glibc for easier unit testing.</span>
+<span class="s2">def </span><span class="s1">_check_glibc_version(version_str</span><span class="s2">, </span><span class="s1">required_major</span><span class="s2">, </span><span class="s1">minimum_minor):</span>
+    <span class="s0"># Parse string and check against requested version.</span>
+    <span class="s0">#</span>
+    <span class="s0"># We use a regexp instead of str.split because we want to discard any</span>
+    <span class="s0"># random junk that might come after the minor version -- this might happen</span>
+    <span class="s0"># in patched/forked versions of glibc (e.g. Linaro's version of glibc</span>
+    <span class="s0"># uses version strings like &quot;2.20-2014.11&quot;). See gh-3588.</span>
+    <span class="s1">m = re.match(</span><span class="s4">r&quot;(?P&lt;major&gt;[0-9]+)\.(?P&lt;minor&gt;[0-9]+)&quot;</span><span class="s2">, </span><span class="s1">version_str)</span>
+    <span class="s2">if not </span><span class="s1">m:</span>
+        <span class="s1">warnings.warn(</span>
+            <span class="s4">&quot;Expected glibc version with 2 components major.minor,&quot;</span>
+            <span class="s4">&quot; got: %s&quot; </span><span class="s1">% version_str</span><span class="s2">,</span>
+            <span class="s1">RuntimeWarning</span><span class="s2">,</span>
+        <span class="s1">)</span>
+        <span class="s2">return False</span>
+    <span class="s2">return </span><span class="s1">(</span>
+        <span class="s1">int(m.group(</span><span class="s4">&quot;major&quot;</span><span class="s1">)) == required_major</span>
+        <span class="s2">and </span><span class="s1">int(m.group(</span><span class="s4">&quot;minor&quot;</span><span class="s1">)) &gt;= minimum_minor</span>
+    <span class="s1">)</span>
+
+
+<span class="s2">def </span><span class="s1">_have_compatible_glibc(required_major</span><span class="s2">, </span><span class="s1">minimum_minor):</span>
+    <span class="s1">version_str = _glibc_version_string()</span>
+    <span class="s2">if </span><span class="s1">version_str </span><span class="s2">is None</span><span class="s1">:</span>
+        <span class="s2">return False</span>
+    <span class="s2">return </span><span class="s1">_check_glibc_version(version_str</span><span class="s2">, </span><span class="s1">required_major</span><span class="s2">, </span><span class="s1">minimum_minor)</span>
+
+
+<span class="s2">def </span><span class="s1">_linux_platforms(is_32bit=_32_BIT_INTERPRETER):</span>
+    <span class="s1">linux = _normalize_string(distutils.util.get_platform())</span>
+    <span class="s2">if </span><span class="s1">linux == </span><span class="s4">&quot;linux_x86_64&quot; </span><span class="s2">and </span><span class="s1">is_32bit:</span>
+        <span class="s1">linux = </span><span class="s4">&quot;linux_i686&quot;</span>
+    <span class="s1">manylinux_support = (</span>
+        <span class="s1">(</span><span class="s4">&quot;manylinux2014&quot;</span><span class="s2">, </span><span class="s1">(</span><span class="s3">2</span><span class="s2">, </span><span class="s3">17</span><span class="s1">))</span><span class="s2">,  </span><span class="s0"># CentOS 7 w/ glibc 2.17 (PEP 599)</span>
+        <span class="s1">(</span><span class="s4">&quot;manylinux2010&quot;</span><span class="s2">, </span><span class="s1">(</span><span class="s3">2</span><span class="s2">, </span><span class="s3">12</span><span class="s1">))</span><span class="s2">,  </span><span class="s0"># CentOS 6 w/ glibc 2.12 (PEP 571)</span>
+        <span class="s1">(</span><span class="s4">&quot;manylinux1&quot;</span><span class="s2">, </span><span class="s1">(</span><span class="s3">2</span><span class="s2">, </span><span class="s3">5</span><span class="s1">))</span><span class="s2">,  </span><span class="s0"># CentOS 5 w/ glibc 2.5 (PEP 513)</span>
+    <span class="s1">)</span>
+    <span class="s1">manylinux_support_iter = iter(manylinux_support)</span>
+    <span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">glibc_version </span><span class="s2">in </span><span class="s1">manylinux_support_iter:</span>
+        <span class="s2">if </span><span class="s1">_is_manylinux_compatible(name</span><span class="s2">, </span><span class="s1">glibc_version):</span>
+            <span class="s1">platforms = [linux.replace(</span><span class="s4">&quot;linux&quot;</span><span class="s2">, </span><span class="s1">name)]</span>
+            <span class="s2">break</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">platforms = []</span>
+    <span class="s0"># Support for a later manylinux implies support for an earlier version.</span>
+    <span class="s1">platforms += [linux.replace(</span><span class="s4">&quot;linux&quot;</span><span class="s2">, </span><span class="s1">name) </span><span class="s2">for </span><span class="s1">name</span><span class="s2">, </span><span class="s1">_ </span><span class="s2">in </span><span class="s1">manylinux_support_iter]</span>
+    <span class="s1">platforms.append(linux)</span>
+    <span class="s2">return </span><span class="s1">platforms</span>
+
+
+<span class="s2">def </span><span class="s1">_generic_platforms():</span>
+    <span class="s1">platform = _normalize_string(distutils.util.get_platform())</span>
+    <span class="s2">return </span><span class="s1">[platform]</span>
+
+
+<span class="s2">def </span><span class="s1">_interpreter_name():</span>
+    <span class="s1">name = platform.python_implementation().lower()</span>
+    <span class="s2">return </span><span class="s1">INTERPRETER_SHORT_NAMES.get(name) </span><span class="s2">or </span><span class="s1">name</span>
+
+
+<span class="s2">def </span><span class="s1">_generic_interpreter(name</span><span class="s2">, </span><span class="s1">py_version):</span>
+    <span class="s1">version = sysconfig.get_config_var(</span><span class="s4">&quot;py_version_nodot&quot;</span><span class="s1">)</span>
+    <span class="s2">if not </span><span class="s1">version:</span>
+        <span class="s1">version = </span><span class="s4">&quot;&quot;</span><span class="s1">.join(map(str</span><span class="s2">, </span><span class="s1">py_version[:</span><span class="s3">2</span><span class="s1">]))</span>
+    <span class="s2">return </span><span class="s4">&quot;{name}{version}&quot;</span><span class="s1">.format(name=name</span><span class="s2">, </span><span class="s1">version=version)</span>
+
+
+<span class="s2">def </span><span class="s1">sys_tags():</span>
+    <span class="s5">&quot;&quot;&quot; 
+    Returns the sequence of tag triples for the running interpreter. 
+ 
+    The order of the sequence corresponds to priority order for the 
+    interpreter, from most to least important. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">py_version = sys.version_info[:</span><span class="s3">2</span><span class="s1">]</span>
+    <span class="s1">interpreter_name = _interpreter_name()</span>
+    <span class="s2">if </span><span class="s1">platform.system() == </span><span class="s4">&quot;Darwin&quot;</span><span class="s1">:</span>
+        <span class="s1">platforms = _mac_platforms()</span>
+    <span class="s2">elif </span><span class="s1">platform.system() == </span><span class="s4">&quot;Linux&quot;</span><span class="s1">:</span>
+        <span class="s1">platforms = _linux_platforms()</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">platforms = _generic_platforms()</span>
+
+    <span class="s2">if </span><span class="s1">interpreter_name == </span><span class="s4">&quot;cp&quot;</span><span class="s1">:</span>
+        <span class="s1">interpreter = _cpython_interpreter(py_version)</span>
+        <span class="s1">abis = _cpython_abis(py_version)</span>
+        <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">_cpython_tags(py_version</span><span class="s2">, </span><span class="s1">interpreter</span><span class="s2">, </span><span class="s1">abis</span><span class="s2">, </span><span class="s1">platforms):</span>
+            <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">elif </span><span class="s1">interpreter_name == </span><span class="s4">&quot;pp&quot;</span><span class="s1">:</span>
+        <span class="s1">interpreter = _pypy_interpreter()</span>
+        <span class="s1">abi = _generic_abi()</span>
+        <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">_pypy_tags(py_version</span><span class="s2">, </span><span class="s1">interpreter</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platforms):</span>
+            <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">else</span><span class="s1">:</span>
+        <span class="s1">interpreter = _generic_interpreter(interpreter_name</span><span class="s2">, </span><span class="s1">py_version)</span>
+        <span class="s1">abi = _generic_abi()</span>
+        <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">_generic_tags(interpreter</span><span class="s2">, </span><span class="s1">py_version</span><span class="s2">, </span><span class="s1">abi</span><span class="s2">, </span><span class="s1">platforms):</span>
+            <span class="s2">yield </span><span class="s1">tag</span>
+    <span class="s2">for </span><span class="s1">tag </span><span class="s2">in </span><span class="s1">_independent_tags(interpreter</span><span class="s2">, </span><span class="s1">py_version</span><span class="s2">, </span><span class="s1">platforms):</span>
+        <span class="s2">yield </span><span class="s1">tag</span>
+</pre>
+</body>
+</html>

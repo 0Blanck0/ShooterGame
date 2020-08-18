@@ -1,0 +1,41 @@
+<html>
+<head>
+<title>constant.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+constant.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">pygame</span>
+<span class="s0">import </span><span class="s1">game</span>
+<span class="s0">from </span><span class="s1">player </span><span class="s0">import </span><span class="s1">Player</span>
+
+<span class="s2"># This fil save all constants variables</span>
+
+<span class="s2"># Screen variables</span>
+<span class="s1">screen_width = </span><span class="s3">1080</span>
+<span class="s1">screen_height = </span><span class="s3">720</span>
+
+<span class="s2"># Game variables</span>
+<span class="s1">game_name = </span><span class="s4">&quot;Shooter_Blanck&quot;</span>
+<span class="s1">background_default = pygame.image.load(</span><span class="s4">'assets/bg.jpg'</span><span class="s1">)</span>
+<span class="s1">player_image_sprite = pygame.image.load(</span><span class="s4">'assets/player.png'</span><span class="s1">)</span>
+<span class="s1">bullet_image_sprite = pygame.image.load(</span><span class="s4">'assets/projectile.png'</span><span class="s1">)</span>
+<span class="s1">mummy_image_sprite = pygame.image.load(</span><span class="s4">'assets/mummy.png'</span><span class="s1">)</span>
+
+<span class="s1">rotate_image_angle_bullet = </span><span class="s3">180</span>
+<span class="s1">default_mummy_posX = </span><span class="s3">1000</span>
+<span class="s1">default_mummy_posY = screen_height - (</span><span class="s3">265 </span><span class="s1">- (Player(game).rect.width/</span><span class="s3">4</span><span class="s1">))</span>
+</pre>
+</body>
+</html>

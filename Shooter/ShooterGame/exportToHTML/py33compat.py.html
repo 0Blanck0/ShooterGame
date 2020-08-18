@@ -1,0 +1,81 @@
+<html>
+<head>
+<title>py33compat.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #6897bb;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+py33compat.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">dis</span>
+<span class="s0">import </span><span class="s1">array</span>
+<span class="s0">import </span><span class="s1">collections</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">html</span>
+<span class="s0">except </span><span class="s1">ImportError:</span>
+    <span class="s1">html = </span><span class="s0">None</span>
+
+<span class="s0">from </span><span class="s1">setuptools.extern </span><span class="s0">import </span><span class="s1">six</span>
+<span class="s0">from </span><span class="s1">setuptools.extern.six.moves </span><span class="s0">import </span><span class="s1">html_parser</span>
+
+<span class="s1">__metaclass__ = type</span>
+
+<span class="s1">OpArg = collections.namedtuple(</span><span class="s2">'OpArg'</span><span class="s0">, </span><span class="s2">'opcode arg'</span><span class="s1">)</span>
+
+
+<span class="s0">class </span><span class="s1">Bytecode_compat:</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">code):</span>
+        <span class="s1">self.code = code</span>
+
+    <span class="s0">def </span><span class="s1">__iter__(self):</span>
+        <span class="s3">&quot;&quot;&quot;Yield '(op,arg)' pair for each operation in code object 'code'&quot;&quot;&quot;</span>
+
+        <span class="s1">bytes = array.array(</span><span class="s2">'b'</span><span class="s0">, </span><span class="s1">self.code.co_code)</span>
+        <span class="s1">eof = len(self.code.co_code)</span>
+
+        <span class="s1">ptr = </span><span class="s4">0</span>
+        <span class="s1">extended_arg = </span><span class="s4">0</span>
+
+        <span class="s0">while </span><span class="s1">ptr &lt; eof:</span>
+
+            <span class="s1">op = bytes[ptr]</span>
+
+            <span class="s0">if </span><span class="s1">op &gt;= dis.HAVE_ARGUMENT:</span>
+
+                <span class="s1">arg = bytes[ptr + </span><span class="s4">1</span><span class="s1">] + bytes[ptr + </span><span class="s4">2</span><span class="s1">] * </span><span class="s4">256 </span><span class="s1">+ extended_arg</span>
+                <span class="s1">ptr += </span><span class="s4">3</span>
+
+                <span class="s0">if </span><span class="s1">op == dis.EXTENDED_ARG:</span>
+                    <span class="s1">long_type = six.integer_types[-</span><span class="s4">1</span><span class="s1">]</span>
+                    <span class="s1">extended_arg = arg * long_type(</span><span class="s4">65536</span><span class="s1">)</span>
+                    <span class="s0">continue</span>
+
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s1">arg = </span><span class="s0">None</span>
+                <span class="s1">ptr += </span><span class="s4">1</span>
+
+            <span class="s0">yield </span><span class="s1">OpArg(op</span><span class="s0">, </span><span class="s1">arg)</span>
+
+
+<span class="s1">Bytecode = getattr(dis</span><span class="s0">, </span><span class="s2">'Bytecode'</span><span class="s0">, </span><span class="s1">Bytecode_compat)</span>
+
+
+<span class="s1">unescape = getattr(html</span><span class="s0">, </span><span class="s2">'unescape'</span><span class="s0">, None</span><span class="s1">)</span>
+<span class="s0">if </span><span class="s1">unescape </span><span class="s0">is None</span><span class="s1">:</span>
+    <span class="s5"># HTMLParser.unescape is deprecated since Python 3.4, and will be removed</span>
+    <span class="s5"># from 3.9.</span>
+    <span class="s1">unescape = html_parser.HTMLParser().unescape</span>
+</pre>
+</body>
+</html>

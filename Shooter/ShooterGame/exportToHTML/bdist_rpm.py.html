@@ -1,0 +1,65 @@
+<html>
+<head>
+<title>bdist_rpm.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+bdist_rpm.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">distutils.command.bdist_rpm </span><span class="s0">as </span><span class="s1">orig</span>
+
+
+<span class="s0">class </span><span class="s1">bdist_rpm(orig.bdist_rpm):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Override the default bdist_rpm behavior to do the following: 
+ 
+    1. Run egg_info to ensure the name and version are properly calculated. 
+    2. Always run 'install' using --single-version-externally-managed to 
+       disable eggs in RPM distributions. 
+    3. Replace dash with underscore in the version numbers for better RPM 
+       compatibility. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">run(self):</span>
+        <span class="s3"># ensure distro name is up-to-date</span>
+        <span class="s1">self.run_command(</span><span class="s4">'egg_info'</span><span class="s1">)</span>
+
+        <span class="s1">orig.bdist_rpm.run(self)</span>
+
+    <span class="s0">def </span><span class="s1">_make_spec_file(self):</span>
+        <span class="s1">version = self.distribution.get_version()</span>
+        <span class="s1">rpmversion = version.replace(</span><span class="s4">'-'</span><span class="s0">, </span><span class="s4">'_'</span><span class="s1">)</span>
+        <span class="s1">spec = orig.bdist_rpm._make_spec_file(self)</span>
+        <span class="s1">line23 = </span><span class="s4">'%define version ' </span><span class="s1">+ version</span>
+        <span class="s1">line24 = </span><span class="s4">'%define version ' </span><span class="s1">+ rpmversion</span>
+        <span class="s1">spec = [</span>
+            <span class="s1">line.replace(</span>
+                <span class="s4">&quot;Source0: %{name}-%{version}.tar&quot;</span><span class="s0">,</span>
+                <span class="s4">&quot;Source0: %{name}-%{unmangled_version}.tar&quot;</span>
+            <span class="s1">).replace(</span>
+                <span class="s4">&quot;setup.py install &quot;</span><span class="s0">,</span>
+                <span class="s4">&quot;setup.py install --single-version-externally-managed &quot;</span>
+            <span class="s1">).replace(</span>
+                <span class="s4">&quot;%setup&quot;</span><span class="s0">,</span>
+                <span class="s4">&quot;%setup -n %{name}-%{unmangled_version}&quot;</span>
+            <span class="s1">).replace(line23</span><span class="s0">, </span><span class="s1">line24)</span>
+            <span class="s0">for </span><span class="s1">line </span><span class="s0">in </span><span class="s1">spec</span>
+        <span class="s1">]</span>
+        <span class="s1">insert_loc = spec.index(line24) + </span><span class="s5">1</span>
+        <span class="s1">unmangled_version = </span><span class="s4">&quot;%define unmangled_version &quot; </span><span class="s1">+ version</span>
+        <span class="s1">spec.insert(insert_loc</span><span class="s0">, </span><span class="s1">unmangled_version)</span>
+        <span class="s0">return </span><span class="s1">spec</span>
+</pre>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<html>
+<head>
+<title>errors.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #629755; font-style: italic;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #cc7832;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+errors.py</font>
+</center></td></tr></table>
+<pre><span class="s0">&quot;&quot;&quot;setuptools.errors 
+ 
+Provides exceptions used by setuptools modules. 
+&quot;&quot;&quot;</span>
+
+<span class="s2">from </span><span class="s1">distutils.errors </span><span class="s2">import </span><span class="s1">DistutilsError</span>
+
+
+<span class="s2">class </span><span class="s1">RemovedCommandError(DistutilsError</span><span class="s2">, </span><span class="s1">RuntimeError):</span>
+    <span class="s0">&quot;&quot;&quot;Error used for commands that have been removed in setuptools. 
+ 
+    Since ``setuptools`` is built on ``distutils``, simply removing a command 
+    from ``setuptools`` will make the behavior fall back to ``distutils``; this 
+    error is raised if a command exists in ``distutils`` but has been actively 
+    removed in ``setuptools``. 
+    &quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>

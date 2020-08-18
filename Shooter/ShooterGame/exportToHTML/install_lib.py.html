@@ -1,0 +1,144 @@
+<html>
+<head>
+<title>install_lib.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+install_lib.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">os</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">itertools </span><span class="s0">import </span><span class="s1">product</span><span class="s0">, </span><span class="s1">starmap</span>
+<span class="s0">import </span><span class="s1">distutils.command.install_lib </span><span class="s0">as </span><span class="s1">orig</span>
+
+
+<span class="s0">class </span><span class="s1">install_lib(orig.install_lib):</span>
+    <span class="s2">&quot;&quot;&quot;Don't add compiled flags to filenames of non-Python files&quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">run(self):</span>
+        <span class="s1">self.build()</span>
+        <span class="s1">outfiles = self.install()</span>
+        <span class="s0">if </span><span class="s1">outfiles </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s3"># always compile, in case we have any extension stubs to deal with</span>
+            <span class="s1">self.byte_compile(outfiles)</span>
+
+    <span class="s0">def </span><span class="s1">get_exclusions(self):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Return a collections.Sized collections.Container of paths to be 
+        excluded for single_version_externally_managed installations. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">all_packages = (</span>
+            <span class="s1">pkg</span>
+            <span class="s0">for </span><span class="s1">ns_pkg </span><span class="s0">in </span><span class="s1">self._get_SVEM_NSPs()</span>
+            <span class="s0">for </span><span class="s1">pkg </span><span class="s0">in </span><span class="s1">self._all_packages(ns_pkg)</span>
+        <span class="s1">)</span>
+
+        <span class="s1">excl_specs = product(all_packages</span><span class="s0">, </span><span class="s1">self._gen_exclusion_paths())</span>
+        <span class="s0">return </span><span class="s1">set(starmap(self._exclude_pkg_path</span><span class="s0">, </span><span class="s1">excl_specs))</span>
+
+    <span class="s0">def </span><span class="s1">_exclude_pkg_path(self</span><span class="s0">, </span><span class="s1">pkg</span><span class="s0">, </span><span class="s1">exclusion_path):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Given a package name and exclusion path within that package, 
+        compute the full exclusion path. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">parts = pkg.split(</span><span class="s4">'.'</span><span class="s1">) + [exclusion_path]</span>
+        <span class="s0">return </span><span class="s1">os.path.join(self.install_dir</span><span class="s0">, </span><span class="s1">*parts)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_all_packages(pkg_name):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        &gt;&gt;&gt; list(install_lib._all_packages('foo.bar.baz')) 
+        ['foo.bar.baz', 'foo.bar', 'foo'] 
+        &quot;&quot;&quot;</span>
+        <span class="s0">while </span><span class="s1">pkg_name:</span>
+            <span class="s0">yield </span><span class="s1">pkg_name</span>
+            <span class="s1">pkg_name</span><span class="s0">, </span><span class="s1">sep</span><span class="s0">, </span><span class="s1">child = pkg_name.rpartition(</span><span class="s4">'.'</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_get_SVEM_NSPs(self):</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Get namespace packages (list) but only for 
+        single_version_externally_managed installations and empty otherwise. 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># TODO: is it necessary to short-circuit here? i.e. what's the cost</span>
+        <span class="s3"># if get_finalized_command is called even when namespace_packages is</span>
+        <span class="s3"># False?</span>
+        <span class="s0">if not </span><span class="s1">self.distribution.namespace_packages:</span>
+            <span class="s0">return </span><span class="s1">[]</span>
+
+        <span class="s1">install_cmd = self.get_finalized_command(</span><span class="s4">'install'</span><span class="s1">)</span>
+        <span class="s1">svem = install_cmd.single_version_externally_managed</span>
+
+        <span class="s0">return </span><span class="s1">self.distribution.namespace_packages </span><span class="s0">if </span><span class="s1">svem </span><span class="s0">else </span><span class="s1">[]</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_gen_exclusion_paths():</span>
+        <span class="s2">&quot;&quot;&quot; 
+        Generate file paths to be excluded for namespace packages (bytecode 
+        cache files). 
+        &quot;&quot;&quot;</span>
+        <span class="s3"># always exclude the package module itself</span>
+        <span class="s0">yield </span><span class="s4">'__init__.py'</span>
+
+        <span class="s0">yield </span><span class="s4">'__init__.pyc'</span>
+        <span class="s0">yield </span><span class="s4">'__init__.pyo'</span>
+
+        <span class="s0">if not </span><span class="s1">hasattr(sys</span><span class="s0">, </span><span class="s4">'implementation'</span><span class="s1">):</span>
+            <span class="s0">return</span>
+
+        <span class="s1">base = os.path.join(</span>
+            <span class="s4">'__pycache__'</span><span class="s0">, </span><span class="s4">'__init__.' </span><span class="s1">+ sys.implementation.cache_tag)</span>
+        <span class="s0">yield </span><span class="s1">base + </span><span class="s4">'.pyc'</span>
+        <span class="s0">yield </span><span class="s1">base + </span><span class="s4">'.pyo'</span>
+        <span class="s0">yield </span><span class="s1">base + </span><span class="s4">'.opt-1.pyc'</span>
+        <span class="s0">yield </span><span class="s1">base + </span><span class="s4">'.opt-2.pyc'</span>
+
+    <span class="s0">def </span><span class="s1">copy_tree(</span>
+            <span class="s1">self</span><span class="s0">, </span><span class="s1">infile</span><span class="s0">, </span><span class="s1">outfile</span><span class="s0">,</span>
+            <span class="s1">preserve_mode=</span><span class="s5">1</span><span class="s0">, </span><span class="s1">preserve_times=</span><span class="s5">1</span><span class="s0">, </span><span class="s1">preserve_symlinks=</span><span class="s5">0</span><span class="s0">, </span><span class="s1">level=</span><span class="s5">1</span>
+    <span class="s1">):</span>
+        <span class="s0">assert </span><span class="s1">preserve_mode </span><span class="s0">and </span><span class="s1">preserve_times </span><span class="s0">and not </span><span class="s1">preserve_symlinks</span>
+        <span class="s1">exclude = self.get_exclusions()</span>
+
+        <span class="s0">if not </span><span class="s1">exclude:</span>
+            <span class="s0">return </span><span class="s1">orig.install_lib.copy_tree(self</span><span class="s0">, </span><span class="s1">infile</span><span class="s0">, </span><span class="s1">outfile)</span>
+
+        <span class="s3"># Exclude namespace package __init__.py* files from the output</span>
+
+        <span class="s0">from </span><span class="s1">setuptools.archive_util </span><span class="s0">import </span><span class="s1">unpack_directory</span>
+        <span class="s0">from </span><span class="s1">distutils </span><span class="s0">import </span><span class="s1">log</span>
+
+        <span class="s1">outfiles = []</span>
+
+        <span class="s0">def </span><span class="s1">pf(src</span><span class="s0">, </span><span class="s1">dst):</span>
+            <span class="s0">if </span><span class="s1">dst </span><span class="s0">in </span><span class="s1">exclude:</span>
+                <span class="s1">log.warn(</span><span class="s4">&quot;Skipping installation of %s (namespace package)&quot;</span><span class="s0">,</span>
+                         <span class="s1">dst)</span>
+                <span class="s0">return False</span>
+
+            <span class="s1">log.info(</span><span class="s4">&quot;copying %s -&gt; %s&quot;</span><span class="s0">, </span><span class="s1">src</span><span class="s0">, </span><span class="s1">os.path.dirname(dst))</span>
+            <span class="s1">outfiles.append(dst)</span>
+            <span class="s0">return </span><span class="s1">dst</span>
+
+        <span class="s1">unpack_directory(infile</span><span class="s0">, </span><span class="s1">outfile</span><span class="s0">, </span><span class="s1">pf)</span>
+        <span class="s0">return </span><span class="s1">outfiles</span>
+
+    <span class="s0">def </span><span class="s1">get_outputs(self):</span>
+        <span class="s1">outputs = orig.install_lib.get_outputs(self)</span>
+        <span class="s1">exclude = self.get_exclusions()</span>
+        <span class="s0">if </span><span class="s1">exclude:</span>
+            <span class="s0">return </span><span class="s1">[f </span><span class="s0">for </span><span class="s1">f </span><span class="s0">in </span><span class="s1">outputs </span><span class="s0">if </span><span class="s1">f </span><span class="s0">not in </span><span class="s1">exclude]</span>
+        <span class="s0">return </span><span class="s1">outputs</span>
+</pre>
+</body>
+</html>

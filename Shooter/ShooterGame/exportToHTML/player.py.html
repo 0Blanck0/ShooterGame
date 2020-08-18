@@ -1,0 +1,114 @@
+<html>
+<head>
+<title>player.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #808080;}
+.s3 { color: #6897bb;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+player.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">pygame</span>
+<span class="s0">import </span><span class="s1">constant</span>
+
+<span class="s2"># Player class (all function for all player)</span>
+
+<span class="s0">class </span><span class="s1">Player(pygame.sprite.Sprite):</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">game):</span>
+        <span class="s1">super().__init__()</span>
+        <span class="s1">self.game = game</span>
+        <span class="s2"># Basic and max health point</span>
+        <span class="s1">self.health = </span><span class="s3">100</span>
+        <span class="s1">self.max_health = </span><span class="s3">100</span>
+        <span class="s2"># Basic attack point</span>
+        <span class="s1">self.attack = </span><span class="s3">10</span>
+        <span class="s2"># Basic player speed</span>
+        <span class="s1">self.speed = </span><span class="s3">8</span>
+        <span class="s1">self.basic_speed = </span><span class="s3">4</span>
+        <span class="s2"># Bullet def</span>
+        <span class="s1">self.all_bullet = pygame.sprite.Group()</span>
+        <span class="s2"># Image for player sprite</span>
+        <span class="s1">self.image = constant.player_image_sprite</span>
+        <span class="s1">self.rect = self.image.get_rect()</span>
+        <span class="s2"># Set default position on screen</span>
+        <span class="s1">self.rect.x = (constant.screen_width/</span><span class="s3">2</span><span class="s1">) - self.rect.width/</span><span class="s3">2</span>
+        <span class="s1">self.rect.y = constant.screen_height - (</span><span class="s3">265 </span><span class="s1">- (self.rect.width/</span><span class="s3">4</span><span class="s1">))</span>
+
+    <span class="s0">def </span><span class="s1">fire(self</span><span class="s0">, </span><span class="s1">direction):</span>
+        <span class="s2"># Create new bullet in the game</span>
+        <span class="s1">bullet = Bullet(self</span><span class="s0">, </span><span class="s1">direction)</span>
+        <span class="s0">if </span><span class="s1">direction == </span><span class="s4">&quot;Left&quot;</span><span class="s1">:</span>
+            <span class="s1">bullet.rotate()</span>
+        <span class="s2"># Add new bullet in bullet group</span>
+        <span class="s1">self.all_bullet.add(bullet)</span>
+
+    <span class="s0">def </span><span class="s1">nothing_move(self):</span>
+        <span class="s2"># Don't move player</span>
+        <span class="s1">self.rect.x = self.rect.x</span>
+
+    <span class="s0">def </span><span class="s1">move_right(self):</span>
+        <span class="s2"># Check mummy collision</span>
+        <span class="s0">if not </span><span class="s1">self.game.check_collision(self</span><span class="s0">, </span><span class="s1">self.game.all_mummy):</span>
+            <span class="s2"># Move player in right</span>
+            <span class="s1">self.rect.x += self.speed</span>
+
+    <span class="s0">def </span><span class="s1">move_left(self):</span>
+        <span class="s2"># Move player in left</span>
+        <span class="s1">self.rect.x -= self.speed</span>
+
+
+<span class="s0">class </span><span class="s1">Bullet(pygame.sprite.Sprite):</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">player</span><span class="s0">, </span><span class="s1">direction):</span>
+        <span class="s1">super().__init__()</span>
+        <span class="s2"># Add player in attribute</span>
+        <span class="s1">self.player = player</span>
+        <span class="s2"># speed of bullet</span>
+        <span class="s0">if </span><span class="s1">direction == </span><span class="s4">&quot;Right&quot;</span><span class="s1">:</span>
+            <span class="s1">self.speed = </span><span class="s3">12</span>
+        <span class="s0">elif </span><span class="s1">direction == </span><span class="s4">&quot;Left&quot;</span><span class="s1">:</span>
+            <span class="s1">self.speed = -</span><span class="s3">12</span>
+        <span class="s2"># Definition default angle of image</span>
+        <span class="s1">self.angle = </span><span class="s3">0</span>
+        <span class="s2"># Bullet image for sprite</span>
+        <span class="s1">self.image = constant.bullet_image_sprite</span>
+        <span class="s2"># Get and set size of bullet</span>
+        <span class="s1">self.rect = self.image.get_rect()</span>
+        <span class="s1">self.width = int(self.rect.width/</span><span class="s3">10</span><span class="s1">)</span>
+        <span class="s1">self.height = int(self.rect.height/</span><span class="s3">10</span><span class="s1">)</span>
+        <span class="s1">self.image = pygame.transform.scale(self.image</span><span class="s0">, </span><span class="s1">(self.width</span><span class="s0">, </span><span class="s1">self.height))</span>
+        <span class="s2"># Set bullet position</span>
+        <span class="s1">self.rect.x = player.rect.x + (player.rect.width/</span><span class="s3">3</span><span class="s1">)</span>
+        <span class="s1">self.rect.y = player.rect.y + (player.rect.width/</span><span class="s3">3</span><span class="s1">)</span>
+        <span class="s2"># Save image of sprite</span>
+        <span class="s1">self.origin_image = self.image</span>
+
+    <span class="s0">def </span><span class="s1">remove(self):</span>
+        <span class="s2"># Remove actual select bullet</span>
+        <span class="s1">self.player.all_bullet.remove(self)</span>
+
+    <span class="s0">def </span><span class="s1">rotate(self):</span>
+        <span class="s2"># Rotate object function</span>
+        <span class="s1">self.angle = constant.rotate_image_angle_bullet</span>
+        <span class="s1">self.image = pygame.transform.rotate(self.origin_image</span><span class="s0">, </span><span class="s1">self.angle)</span>
+
+    <span class="s0">def </span><span class="s1">move(self):</span>
+        <span class="s2"># Move bullet</span>
+        <span class="s1">self.rect.x += self.speed</span>
+        <span class="s2"># It's outside the screen destroy it</span>
+        <span class="s0">if </span><span class="s1">self.rect.x &gt; constant.screen_width </span><span class="s0">or </span><span class="s1">self.rect.x &lt; -</span><span class="s3">50</span><span class="s1">:</span>
+            <span class="s1">self.remove()</span>
+        <span class="s2"># If bullet enter in collision with monster remove self</span>
+        <span class="s0">if </span><span class="s1">self.player.game.check_collision(self</span><span class="s0">, </span><span class="s1">self.player.game.all_mummy):</span>
+            <span class="s1">self.remove()</span></pre>
+</body>
+</html>

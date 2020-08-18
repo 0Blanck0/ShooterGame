@@ -1,0 +1,1053 @@
+<html>
+<head>
+<title>dist.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #808080;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #cc7832;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+dist.py</font>
+</center></td></tr></table>
+<pre><span class="s0"># -*- coding: utf-8 -*-</span>
+<span class="s1">__all__ = [</span><span class="s2">'Distribution'</span><span class="s1">]</span>
+
+<span class="s3">import </span><span class="s1">io</span>
+<span class="s3">import </span><span class="s1">sys</span>
+<span class="s3">import </span><span class="s1">re</span>
+<span class="s3">import </span><span class="s1">os</span>
+<span class="s3">import </span><span class="s1">warnings</span>
+<span class="s3">import </span><span class="s1">numbers</span>
+<span class="s3">import </span><span class="s1">distutils.log</span>
+<span class="s3">import </span><span class="s1">distutils.core</span>
+<span class="s3">import </span><span class="s1">distutils.cmd</span>
+<span class="s3">import </span><span class="s1">distutils.dist</span>
+<span class="s3">from </span><span class="s1">distutils.util </span><span class="s3">import </span><span class="s1">strtobool</span>
+<span class="s3">from </span><span class="s1">distutils.debug </span><span class="s3">import </span><span class="s1">DEBUG</span>
+<span class="s3">from </span><span class="s1">distutils.fancy_getopt </span><span class="s3">import </span><span class="s1">translate_longopt</span>
+<span class="s3">import </span><span class="s1">itertools</span>
+
+<span class="s3">from </span><span class="s1">collections </span><span class="s3">import </span><span class="s1">defaultdict</span>
+<span class="s3">from </span><span class="s1">email </span><span class="s3">import </span><span class="s1">message_from_file</span>
+
+<span class="s3">from </span><span class="s1">distutils.errors </span><span class="s3">import </span><span class="s1">DistutilsOptionError</span><span class="s3">, </span><span class="s1">DistutilsSetupError</span>
+<span class="s3">from </span><span class="s1">distutils.util </span><span class="s3">import </span><span class="s1">rfc822_escape</span>
+<span class="s3">from </span><span class="s1">distutils.version </span><span class="s3">import </span><span class="s1">StrictVersion</span>
+
+<span class="s3">from </span><span class="s1">setuptools.extern </span><span class="s3">import </span><span class="s1">six</span>
+<span class="s3">from </span><span class="s1">setuptools.extern </span><span class="s3">import </span><span class="s1">packaging</span>
+<span class="s3">from </span><span class="s1">setuptools.extern </span><span class="s3">import </span><span class="s1">ordered_set</span>
+<span class="s3">from </span><span class="s1">setuptools.extern.six.moves </span><span class="s3">import </span><span class="s1">map</span><span class="s3">, </span><span class="s1">filter</span><span class="s3">, </span><span class="s1">filterfalse</span>
+
+<span class="s3">from </span><span class="s1">. </span><span class="s3">import </span><span class="s1">SetuptoolsDeprecationWarning</span>
+
+<span class="s3">import </span><span class="s1">setuptools</span>
+<span class="s3">from </span><span class="s1">setuptools </span><span class="s3">import </span><span class="s1">windows_support</span>
+<span class="s3">from </span><span class="s1">setuptools.monkey </span><span class="s3">import </span><span class="s1">get_unpatched</span>
+<span class="s3">from </span><span class="s1">setuptools.config </span><span class="s3">import </span><span class="s1">parse_configuration</span>
+<span class="s3">import </span><span class="s1">pkg_resources</span>
+
+<span class="s1">__import__(</span><span class="s2">'setuptools.extern.packaging.specifiers'</span><span class="s1">)</span>
+<span class="s1">__import__(</span><span class="s2">'setuptools.extern.packaging.version'</span><span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">_get_unpatched(cls):</span>
+    <span class="s1">warnings.warn(</span><span class="s2">&quot;Do not call this function&quot;</span><span class="s3">, </span><span class="s1">DistDeprecationWarning)</span>
+    <span class="s3">return </span><span class="s1">get_unpatched(cls)</span>
+
+
+<span class="s3">def </span><span class="s1">get_metadata_version(self):</span>
+    <span class="s1">mv = getattr(self</span><span class="s3">, </span><span class="s2">'metadata_version'</span><span class="s3">, None</span><span class="s1">)</span>
+
+    <span class="s3">if </span><span class="s1">mv </span><span class="s3">is None</span><span class="s1">:</span>
+        <span class="s3">if </span><span class="s1">self.long_description_content_type </span><span class="s3">or </span><span class="s1">self.provides_extras:</span>
+            <span class="s1">mv = StrictVersion(</span><span class="s2">'2.1'</span><span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">(self.maintainer </span><span class="s3">is not None or</span>
+              <span class="s1">self.maintainer_email </span><span class="s3">is not None or</span>
+              <span class="s1">getattr(self</span><span class="s3">, </span><span class="s2">'python_requires'</span><span class="s3">, None</span><span class="s1">) </span><span class="s3">is not None or</span>
+              <span class="s1">self.project_urls):</span>
+            <span class="s1">mv = StrictVersion(</span><span class="s2">'1.2'</span><span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">(self.provides </span><span class="s3">or </span><span class="s1">self.requires </span><span class="s3">or </span><span class="s1">self.obsoletes </span><span class="s3">or</span>
+                <span class="s1">self.classifiers </span><span class="s3">or </span><span class="s1">self.download_url):</span>
+            <span class="s1">mv = StrictVersion(</span><span class="s2">'1.1'</span><span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">mv = StrictVersion(</span><span class="s2">'1.0'</span><span class="s1">)</span>
+
+        <span class="s1">self.metadata_version = mv</span>
+
+    <span class="s3">return </span><span class="s1">mv</span>
+
+
+<span class="s3">def </span><span class="s1">read_pkg_file(self</span><span class="s3">, </span><span class="s1">file):</span>
+    <span class="s4">&quot;&quot;&quot;Reads the metadata values from a file object.&quot;&quot;&quot;</span>
+    <span class="s1">msg = message_from_file(file)</span>
+
+    <span class="s3">def </span><span class="s1">_read_field(name):</span>
+        <span class="s1">value = msg[name]</span>
+        <span class="s3">if </span><span class="s1">value == </span><span class="s2">'UNKNOWN'</span><span class="s1">:</span>
+            <span class="s3">return None</span>
+        <span class="s3">return </span><span class="s1">value</span>
+
+    <span class="s3">def </span><span class="s1">_read_list(name):</span>
+        <span class="s1">values = msg.get_all(name</span><span class="s3">, None</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">values == []:</span>
+            <span class="s3">return None</span>
+        <span class="s3">return </span><span class="s1">values</span>
+
+    <span class="s1">self.metadata_version = StrictVersion(msg[</span><span class="s2">'metadata-version'</span><span class="s1">])</span>
+    <span class="s1">self.name = _read_field(</span><span class="s2">'name'</span><span class="s1">)</span>
+    <span class="s1">self.version = _read_field(</span><span class="s2">'version'</span><span class="s1">)</span>
+    <span class="s1">self.description = _read_field(</span><span class="s2">'summary'</span><span class="s1">)</span>
+    <span class="s0"># we are filling author only.</span>
+    <span class="s1">self.author = _read_field(</span><span class="s2">'author'</span><span class="s1">)</span>
+    <span class="s1">self.maintainer = </span><span class="s3">None</span>
+    <span class="s1">self.author_email = _read_field(</span><span class="s2">'author-email'</span><span class="s1">)</span>
+    <span class="s1">self.maintainer_email = </span><span class="s3">None</span>
+    <span class="s1">self.url = _read_field(</span><span class="s2">'home-page'</span><span class="s1">)</span>
+    <span class="s1">self.license = _read_field(</span><span class="s2">'license'</span><span class="s1">)</span>
+
+    <span class="s3">if </span><span class="s2">'download-url' </span><span class="s3">in </span><span class="s1">msg:</span>
+        <span class="s1">self.download_url = _read_field(</span><span class="s2">'download-url'</span><span class="s1">)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">self.download_url = </span><span class="s3">None</span>
+
+    <span class="s1">self.long_description = _read_field(</span><span class="s2">'description'</span><span class="s1">)</span>
+    <span class="s1">self.description = _read_field(</span><span class="s2">'summary'</span><span class="s1">)</span>
+
+    <span class="s3">if </span><span class="s2">'keywords' </span><span class="s3">in </span><span class="s1">msg:</span>
+        <span class="s1">self.keywords = _read_field(</span><span class="s2">'keywords'</span><span class="s1">).split(</span><span class="s2">','</span><span class="s1">)</span>
+
+    <span class="s1">self.platforms = _read_list(</span><span class="s2">'platform'</span><span class="s1">)</span>
+    <span class="s1">self.classifiers = _read_list(</span><span class="s2">'classifier'</span><span class="s1">)</span>
+
+    <span class="s0"># PEP 314 - these fields only exist in 1.1</span>
+    <span class="s3">if </span><span class="s1">self.metadata_version == StrictVersion(</span><span class="s2">'1.1'</span><span class="s1">):</span>
+        <span class="s1">self.requires = _read_list(</span><span class="s2">'requires'</span><span class="s1">)</span>
+        <span class="s1">self.provides = _read_list(</span><span class="s2">'provides'</span><span class="s1">)</span>
+        <span class="s1">self.obsoletes = _read_list(</span><span class="s2">'obsoletes'</span><span class="s1">)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">self.requires = </span><span class="s3">None</span>
+        <span class="s1">self.provides = </span><span class="s3">None</span>
+        <span class="s1">self.obsoletes = </span><span class="s3">None</span>
+
+
+<span class="s0"># Based on Python 3.5 version</span>
+<span class="s3">def </span><span class="s1">write_pkg_file(self</span><span class="s3">, </span><span class="s1">file):</span>
+    <span class="s4">&quot;&quot;&quot;Write the PKG-INFO format data to a file object. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">version = self.get_metadata_version()</span>
+
+    <span class="s3">if </span><span class="s1">six.PY2:</span>
+        <span class="s3">def </span><span class="s1">write_field(key</span><span class="s3">, </span><span class="s1">value):</span>
+            <span class="s1">file.write(</span><span class="s2">&quot;%s: %s</span><span class="s3">\n</span><span class="s2">&quot; </span><span class="s1">% (key</span><span class="s3">, </span><span class="s1">self._encode_field(value)))</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s3">def </span><span class="s1">write_field(key</span><span class="s3">, </span><span class="s1">value):</span>
+            <span class="s1">file.write(</span><span class="s2">&quot;%s: %s</span><span class="s3">\n</span><span class="s2">&quot; </span><span class="s1">% (key</span><span class="s3">, </span><span class="s1">value))</span>
+
+    <span class="s1">write_field(</span><span class="s2">'Metadata-Version'</span><span class="s3">, </span><span class="s1">str(version))</span>
+    <span class="s1">write_field(</span><span class="s2">'Name'</span><span class="s3">, </span><span class="s1">self.get_name())</span>
+    <span class="s1">write_field(</span><span class="s2">'Version'</span><span class="s3">, </span><span class="s1">self.get_version())</span>
+    <span class="s1">write_field(</span><span class="s2">'Summary'</span><span class="s3">, </span><span class="s1">self.get_description())</span>
+    <span class="s1">write_field(</span><span class="s2">'Home-page'</span><span class="s3">, </span><span class="s1">self.get_url())</span>
+
+    <span class="s3">if </span><span class="s1">version &lt; StrictVersion(</span><span class="s2">'1.2'</span><span class="s1">):</span>
+        <span class="s1">write_field(</span><span class="s2">'Author'</span><span class="s3">, </span><span class="s1">self.get_contact())</span>
+        <span class="s1">write_field(</span><span class="s2">'Author-email'</span><span class="s3">, </span><span class="s1">self.get_contact_email())</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">optional_fields = (</span>
+            <span class="s1">(</span><span class="s2">'Author'</span><span class="s3">, </span><span class="s2">'author'</span><span class="s1">)</span><span class="s3">,</span>
+            <span class="s1">(</span><span class="s2">'Author-email'</span><span class="s3">, </span><span class="s2">'author_email'</span><span class="s1">)</span><span class="s3">,</span>
+            <span class="s1">(</span><span class="s2">'Maintainer'</span><span class="s3">, </span><span class="s2">'maintainer'</span><span class="s1">)</span><span class="s3">,</span>
+            <span class="s1">(</span><span class="s2">'Maintainer-email'</span><span class="s3">, </span><span class="s2">'maintainer_email'</span><span class="s1">)</span><span class="s3">,</span>
+        <span class="s1">)</span>
+
+        <span class="s3">for </span><span class="s1">field</span><span class="s3">, </span><span class="s1">attr </span><span class="s3">in </span><span class="s1">optional_fields:</span>
+            <span class="s1">attr_val = getattr(self</span><span class="s3">, </span><span class="s1">attr)</span>
+
+            <span class="s3">if </span><span class="s1">attr_val </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">write_field(field</span><span class="s3">, </span><span class="s1">attr_val)</span>
+
+    <span class="s1">write_field(</span><span class="s2">'License'</span><span class="s3">, </span><span class="s1">self.get_license())</span>
+    <span class="s3">if </span><span class="s1">self.download_url:</span>
+        <span class="s1">write_field(</span><span class="s2">'Download-URL'</span><span class="s3">, </span><span class="s1">self.download_url)</span>
+    <span class="s3">for </span><span class="s1">project_url </span><span class="s3">in </span><span class="s1">self.project_urls.items():</span>
+        <span class="s1">write_field(</span><span class="s2">'Project-URL'</span><span class="s3">, </span><span class="s2">'%s, %s' </span><span class="s1">% project_url)</span>
+
+    <span class="s1">long_desc = rfc822_escape(self.get_long_description())</span>
+    <span class="s1">write_field(</span><span class="s2">'Description'</span><span class="s3">, </span><span class="s1">long_desc)</span>
+
+    <span class="s1">keywords = </span><span class="s2">','</span><span class="s1">.join(self.get_keywords())</span>
+    <span class="s3">if </span><span class="s1">keywords:</span>
+        <span class="s1">write_field(</span><span class="s2">'Keywords'</span><span class="s3">, </span><span class="s1">keywords)</span>
+
+    <span class="s3">if </span><span class="s1">version &gt;= StrictVersion(</span><span class="s2">'1.2'</span><span class="s1">):</span>
+        <span class="s3">for </span><span class="s1">platform </span><span class="s3">in </span><span class="s1">self.get_platforms():</span>
+            <span class="s1">write_field(</span><span class="s2">'Platform'</span><span class="s3">, </span><span class="s1">platform)</span>
+    <span class="s3">else</span><span class="s1">:</span>
+        <span class="s1">self._write_list(file</span><span class="s3">, </span><span class="s2">'Platform'</span><span class="s3">, </span><span class="s1">self.get_platforms())</span>
+
+    <span class="s1">self._write_list(file</span><span class="s3">, </span><span class="s2">'Classifier'</span><span class="s3">, </span><span class="s1">self.get_classifiers())</span>
+
+    <span class="s0"># PEP 314</span>
+    <span class="s1">self._write_list(file</span><span class="s3">, </span><span class="s2">'Requires'</span><span class="s3">, </span><span class="s1">self.get_requires())</span>
+    <span class="s1">self._write_list(file</span><span class="s3">, </span><span class="s2">'Provides'</span><span class="s3">, </span><span class="s1">self.get_provides())</span>
+    <span class="s1">self._write_list(file</span><span class="s3">, </span><span class="s2">'Obsoletes'</span><span class="s3">, </span><span class="s1">self.get_obsoletes())</span>
+
+    <span class="s0"># Setuptools specific for PEP 345</span>
+    <span class="s3">if </span><span class="s1">hasattr(self</span><span class="s3">, </span><span class="s2">'python_requires'</span><span class="s1">):</span>
+        <span class="s1">write_field(</span><span class="s2">'Requires-Python'</span><span class="s3">, </span><span class="s1">self.python_requires)</span>
+
+    <span class="s0"># PEP 566</span>
+    <span class="s3">if </span><span class="s1">self.long_description_content_type:</span>
+        <span class="s1">write_field(</span>
+            <span class="s2">'Description-Content-Type'</span><span class="s3">,</span>
+            <span class="s1">self.long_description_content_type</span>
+        <span class="s1">)</span>
+    <span class="s3">if </span><span class="s1">self.provides_extras:</span>
+        <span class="s3">for </span><span class="s1">extra </span><span class="s3">in </span><span class="s1">self.provides_extras:</span>
+            <span class="s1">write_field(</span><span class="s2">'Provides-Extra'</span><span class="s3">, </span><span class="s1">extra)</span>
+
+
+<span class="s1">sequence = tuple</span><span class="s3">, </span><span class="s1">list</span>
+
+
+<span class="s3">def </span><span class="s1">check_importable(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">ep = pkg_resources.EntryPoint.parse(</span><span class="s2">'x=' </span><span class="s1">+ value)</span>
+        <span class="s3">assert not </span><span class="s1">ep.extras</span>
+    <span class="s3">except </span><span class="s1">(TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">AssertionError):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+            <span class="s2">&quot;%r must be importable 'module:attrs' string (got %r)&quot;</span>
+            <span class="s1">% (attr</span><span class="s3">, </span><span class="s1">value)</span>
+        <span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">assert_string_list(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that value is a string list&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s0"># verify that value is a list or tuple to exclude unordered</span>
+        <span class="s0"># or single-use iterables</span>
+        <span class="s3">assert </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">(list</span><span class="s3">, </span><span class="s1">tuple))</span>
+        <span class="s0"># verify that elements of value are strings</span>
+        <span class="s3">assert </span><span class="s2">''</span><span class="s1">.join(value) != value</span>
+    <span class="s3">except </span><span class="s1">(TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">AttributeError</span><span class="s3">, </span><span class="s1">AssertionError):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+            <span class="s2">&quot;%r must be a list of strings (got %r)&quot; </span><span class="s1">% (attr</span><span class="s3">, </span><span class="s1">value)</span>
+        <span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">check_nsp(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that namespace packages are valid&quot;&quot;&quot;</span>
+    <span class="s1">ns_packages = value</span>
+    <span class="s1">assert_string_list(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">ns_packages)</span>
+    <span class="s3">for </span><span class="s1">nsp </span><span class="s3">in </span><span class="s1">ns_packages:</span>
+        <span class="s3">if not </span><span class="s1">dist.has_contents_for(nsp):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;Distribution contains no modules or packages for &quot; </span><span class="s1">+</span>
+                <span class="s2">&quot;namespace package %r&quot; </span><span class="s1">% nsp</span>
+            <span class="s1">)</span>
+        <span class="s1">parent</span><span class="s3">, </span><span class="s1">sep</span><span class="s3">, </span><span class="s1">child = nsp.rpartition(</span><span class="s2">'.'</span><span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">parent </span><span class="s3">and </span><span class="s1">parent </span><span class="s3">not in </span><span class="s1">ns_packages:</span>
+            <span class="s1">distutils.log.warn(</span>
+                <span class="s2">&quot;WARNING: %r is declared as a package namespace, but %r&quot;</span>
+                <span class="s2">&quot; is not: please correct this in setup.py&quot;</span><span class="s3">, </span><span class="s1">nsp</span><span class="s3">, </span><span class="s1">parent</span>
+            <span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">check_extras(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that extras_require mapping is valid&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">list(itertools.starmap(_check_extra</span><span class="s3">, </span><span class="s1">value.items()))</span>
+    <span class="s3">except </span><span class="s1">(TypeError</span><span class="s3">, </span><span class="s1">ValueError</span><span class="s3">, </span><span class="s1">AttributeError):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+            <span class="s2">&quot;'extras_require' must be a dictionary whose values are &quot;</span>
+            <span class="s2">&quot;strings or lists of strings containing valid project/version &quot;</span>
+            <span class="s2">&quot;requirement specifiers.&quot;</span>
+        <span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">_check_extra(extra</span><span class="s3">, </span><span class="s1">reqs):</span>
+    <span class="s1">name</span><span class="s3">, </span><span class="s1">sep</span><span class="s3">, </span><span class="s1">marker = extra.partition(</span><span class="s2">':'</span><span class="s1">)</span>
+    <span class="s3">if </span><span class="s1">marker </span><span class="s3">and </span><span class="s1">pkg_resources.invalid_marker(marker):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span><span class="s2">&quot;Invalid environment marker: &quot; </span><span class="s1">+ marker)</span>
+    <span class="s1">list(pkg_resources.parse_requirements(reqs))</span>
+
+
+<span class="s3">def </span><span class="s1">assert_bool(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that value is True, False, 0, or 1&quot;&quot;&quot;</span>
+    <span class="s3">if </span><span class="s1">bool(value) != value:</span>
+        <span class="s1">tmpl = </span><span class="s2">&quot;{attr!r} must be a boolean value (got {value!r})&quot;</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(tmpl.format(attr=attr</span><span class="s3">, </span><span class="s1">value=value))</span>
+
+
+<span class="s3">def </span><span class="s1">check_requirements(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that install_requires is a valid requirements list&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">list(pkg_resources.parse_requirements(value))</span>
+        <span class="s3">if </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">(dict</span><span class="s3">, </span><span class="s1">set)):</span>
+            <span class="s3">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;Unordered types are not allowed&quot;</span><span class="s1">)</span>
+    <span class="s3">except </span><span class="s1">(TypeError</span><span class="s3">, </span><span class="s1">ValueError) </span><span class="s3">as </span><span class="s1">error:</span>
+        <span class="s1">tmpl = (</span>
+            <span class="s2">&quot;{attr!r} must be a string or list of strings &quot;</span>
+            <span class="s2">&quot;containing valid project/version requirement specifiers; {error}&quot;</span>
+        <span class="s1">)</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(tmpl.format(attr=attr</span><span class="s3">, </span><span class="s1">error=error))</span>
+
+
+<span class="s3">def </span><span class="s1">check_specifier(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that value is a valid version specifier&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">packaging.specifiers.SpecifierSet(value)</span>
+    <span class="s3">except </span><span class="s1">packaging.specifiers.InvalidSpecifier </span><span class="s3">as </span><span class="s1">error:</span>
+        <span class="s1">tmpl = (</span>
+            <span class="s2">&quot;{attr!r} must be a string &quot;</span>
+            <span class="s2">&quot;containing valid version specifiers; {error}&quot;</span>
+        <span class="s1">)</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(tmpl.format(attr=attr</span><span class="s3">, </span><span class="s1">error=error))</span>
+
+
+<span class="s3">def </span><span class="s1">check_entry_points(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that entry_points map is parseable&quot;&quot;&quot;</span>
+    <span class="s3">try</span><span class="s1">:</span>
+        <span class="s1">pkg_resources.EntryPoint.parse_map(value)</span>
+    <span class="s3">except </span><span class="s1">ValueError </span><span class="s3">as </span><span class="s1">e:</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(e)</span>
+
+
+<span class="s3">def </span><span class="s1">check_test_suite(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s3">if not </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">six.string_types):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span><span class="s2">&quot;test_suite must be a string&quot;</span><span class="s1">)</span>
+
+
+<span class="s3">def </span><span class="s1">check_package_data(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s4">&quot;&quot;&quot;Verify that value is a dictionary of package names to glob lists&quot;&quot;&quot;</span>
+    <span class="s3">if not </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">dict):</span>
+        <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+            <span class="s2">&quot;{!r} must be a dictionary mapping package names to lists of &quot;</span>
+            <span class="s2">&quot;string wildcard patterns&quot;</span><span class="s1">.format(attr))</span>
+    <span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">value.items():</span>
+        <span class="s3">if not </span><span class="s1">isinstance(k</span><span class="s3">, </span><span class="s1">six.string_types):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;keys of {!r} dict must be strings (got {!r})&quot;</span>
+                <span class="s1">.format(attr</span><span class="s3">, </span><span class="s1">k)</span>
+            <span class="s1">)</span>
+        <span class="s1">assert_string_list(dist</span><span class="s3">, </span><span class="s2">'values of {!r} dict'</span><span class="s1">.format(attr)</span><span class="s3">, </span><span class="s1">v)</span>
+
+
+<span class="s3">def </span><span class="s1">check_packages(dist</span><span class="s3">, </span><span class="s1">attr</span><span class="s3">, </span><span class="s1">value):</span>
+    <span class="s3">for </span><span class="s1">pkgname </span><span class="s3">in </span><span class="s1">value:</span>
+        <span class="s3">if not </span><span class="s1">re.match(</span><span class="s2">r'\w+(\.\w+)*'</span><span class="s3">, </span><span class="s1">pkgname):</span>
+            <span class="s1">distutils.log.warn(</span>
+                <span class="s2">&quot;WARNING: %r not a valid package name; please use only &quot;</span>
+                <span class="s2">&quot;.-separated package names in setup.py&quot;</span><span class="s3">, </span><span class="s1">pkgname</span>
+            <span class="s1">)</span>
+
+
+<span class="s1">_Distribution = get_unpatched(distutils.core.Distribution)</span>
+
+
+<span class="s3">class </span><span class="s1">Distribution(_Distribution):</span>
+    <span class="s4">&quot;&quot;&quot;Distribution with support for tests and package data 
+ 
+    This is an enhanced version of 'distutils.dist.Distribution' that 
+    effectively adds the following new optional keyword arguments to 'setup()': 
+ 
+     'install_requires' -- a string or sequence of strings specifying project 
+        versions that the distribution requires when installed, in the format 
+        used by 'pkg_resources.require()'.  They will be installed 
+        automatically when the package is installed.  If you wish to use 
+        packages that are not available in PyPI, or want to give your users an 
+        alternate download location, you can add a 'find_links' option to the 
+        '[easy_install]' section of your project's 'setup.cfg' file, and then 
+        setuptools will scan the listed web pages for links that satisfy the 
+        requirements. 
+ 
+     'extras_require' -- a dictionary mapping names of optional &quot;extras&quot; to the 
+        additional requirement(s) that using those extras incurs. For example, 
+        this:: 
+ 
+            extras_require = dict(reST = [&quot;docutils&gt;=0.3&quot;, &quot;reSTedit&quot;]) 
+ 
+        indicates that the distribution can optionally provide an extra 
+        capability called &quot;reST&quot;, but it can only be used if docutils and 
+        reSTedit are installed.  If the user installs your package using 
+        EasyInstall and requests one of your extras, the corresponding 
+        additional requirements will be installed if needed. 
+ 
+     'test_suite' -- the name of a test suite to run for the 'test' command. 
+        If the user runs 'python setup.py test', the package will be installed, 
+        and the named test suite will be run.  The format is the same as 
+        would be used on a 'unittest.py' command line.  That is, it is the 
+        dotted name of an object to import and call to generate a test suite. 
+ 
+     'package_data' -- a dictionary mapping package names to lists of filenames 
+        or globs to use to find data files contained in the named packages. 
+        If the dictionary has filenames or globs listed under '&quot;&quot;' (the empty 
+        string), those names will be searched for in every package, in addition 
+        to any names for the specific package.  Data files found using these 
+        names/globs will be installed along with the package, in the same 
+        location as the package.  Note that globs are allowed to reference 
+        the contents of non-package subdirectories, as long as you use '/' as 
+        a path separator.  (Globs are automatically converted to 
+        platform-specific paths at runtime.) 
+ 
+    In addition to these new keywords, this class also has several new methods 
+    for manipulating the distribution's contents.  For example, the 'include()' 
+    and 'exclude()' methods can be thought of as in-place add and subtract 
+    commands that add or remove packages, modules, extensions, and so on from 
+    the distribution. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">_DISTUTILS_UNSUPPORTED_METADATA = {</span>
+        <span class="s2">'long_description_content_type'</span><span class="s1">: </span><span class="s3">None,</span>
+        <span class="s2">'project_urls'</span><span class="s1">: dict</span><span class="s3">,</span>
+        <span class="s2">'provides_extras'</span><span class="s1">: ordered_set.OrderedSet</span><span class="s3">,</span>
+        <span class="s2">'license_files'</span><span class="s1">: ordered_set.OrderedSet</span><span class="s3">,</span>
+    <span class="s1">}</span>
+
+    <span class="s1">_patched_dist = </span><span class="s3">None</span>
+
+    <span class="s3">def </span><span class="s1">patch_missing_pkg_info(self</span><span class="s3">, </span><span class="s1">attrs):</span>
+        <span class="s0"># Fake up a replacement for the data that would normally come from</span>
+        <span class="s0"># PKG-INFO, but which might not yet be built if this is a fresh</span>
+        <span class="s0"># checkout.</span>
+        <span class="s0">#</span>
+        <span class="s3">if not </span><span class="s1">attrs </span><span class="s3">or </span><span class="s2">'name' </span><span class="s3">not in </span><span class="s1">attrs </span><span class="s3">or </span><span class="s2">'version' </span><span class="s3">not in </span><span class="s1">attrs:</span>
+            <span class="s3">return</span>
+        <span class="s1">key = pkg_resources.safe_name(str(attrs[</span><span class="s2">'name'</span><span class="s1">])).lower()</span>
+        <span class="s1">dist = pkg_resources.working_set.by_key.get(key)</span>
+        <span class="s3">if </span><span class="s1">dist </span><span class="s3">is not None and not </span><span class="s1">dist.has_metadata(</span><span class="s2">'PKG-INFO'</span><span class="s1">):</span>
+            <span class="s1">dist._version = pkg_resources.safe_version(str(attrs[</span><span class="s2">'version'</span><span class="s1">]))</span>
+            <span class="s1">self._patched_dist = dist</span>
+
+    <span class="s3">def </span><span class="s1">__init__(self</span><span class="s3">, </span><span class="s1">attrs=</span><span class="s3">None</span><span class="s1">):</span>
+        <span class="s1">have_package_data = hasattr(self</span><span class="s3">, </span><span class="s2">&quot;package_data&quot;</span><span class="s1">)</span>
+        <span class="s3">if not </span><span class="s1">have_package_data:</span>
+            <span class="s1">self.package_data = {}</span>
+        <span class="s1">attrs = attrs </span><span class="s3">or </span><span class="s1">{}</span>
+        <span class="s1">self.dist_files = []</span>
+        <span class="s0"># Filter-out setuptools' specific options.</span>
+        <span class="s1">self.src_root = attrs.pop(</span><span class="s2">&quot;src_root&quot;</span><span class="s3">, None</span><span class="s1">)</span>
+        <span class="s1">self.patch_missing_pkg_info(attrs)</span>
+        <span class="s1">self.dependency_links = attrs.pop(</span><span class="s2">'dependency_links'</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s1">self.setup_requires = attrs.pop(</span><span class="s2">'setup_requires'</span><span class="s3">, </span><span class="s1">[])</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">pkg_resources.iter_entry_points(</span><span class="s2">'distutils.setup_keywords'</span><span class="s1">):</span>
+            <span class="s1">vars(self).setdefault(ep.name</span><span class="s3">, None</span><span class="s1">)</span>
+        <span class="s1">_Distribution.__init__(self</span><span class="s3">, </span><span class="s1">{</span>
+            <span class="s1">k: v </span><span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">attrs.items()</span>
+            <span class="s3">if </span><span class="s1">k </span><span class="s3">not in </span><span class="s1">self._DISTUTILS_UNSUPPORTED_METADATA</span>
+        <span class="s1">})</span>
+
+        <span class="s0"># Fill-in missing metadata fields not supported by distutils.</span>
+        <span class="s0"># Note some fields may have been set by other tools (e.g. pbr)</span>
+        <span class="s0"># above; they are taken preferrentially to setup() arguments</span>
+        <span class="s3">for </span><span class="s1">option</span><span class="s3">, </span><span class="s1">default </span><span class="s3">in </span><span class="s1">self._DISTUTILS_UNSUPPORTED_METADATA.items():</span>
+            <span class="s3">for </span><span class="s1">source </span><span class="s3">in </span><span class="s1">self.metadata.__dict__</span><span class="s3">, </span><span class="s1">attrs:</span>
+                <span class="s3">if </span><span class="s1">option </span><span class="s3">in </span><span class="s1">source:</span>
+                    <span class="s1">value = source[option]</span>
+                    <span class="s3">break</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">value = default() </span><span class="s3">if </span><span class="s1">default </span><span class="s3">else None</span>
+            <span class="s1">setattr(self.metadata</span><span class="s3">, </span><span class="s1">option</span><span class="s3">, </span><span class="s1">value)</span>
+
+        <span class="s1">self.metadata.version = self._normalize_version(</span>
+            <span class="s1">self._validate_version(self.metadata.version))</span>
+        <span class="s1">self._finalize_requires()</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_normalize_version(version):</span>
+        <span class="s3">if </span><span class="s1">isinstance(version</span><span class="s3">, </span><span class="s1">setuptools.sic) </span><span class="s3">or </span><span class="s1">version </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">version</span>
+
+        <span class="s1">normalized = str(packaging.version.Version(version))</span>
+        <span class="s3">if </span><span class="s1">version != normalized:</span>
+            <span class="s1">tmpl = </span><span class="s2">&quot;Normalizing '{version}' to '{normalized}'&quot;</span>
+            <span class="s1">warnings.warn(tmpl.format(**locals()))</span>
+            <span class="s3">return </span><span class="s1">normalized</span>
+        <span class="s3">return </span><span class="s1">version</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_validate_version(version):</span>
+        <span class="s3">if </span><span class="s1">isinstance(version</span><span class="s3">, </span><span class="s1">numbers.Number):</span>
+            <span class="s0"># Some people apparently take &quot;version number&quot; too literally :)</span>
+            <span class="s1">version = str(version)</span>
+
+        <span class="s3">if </span><span class="s1">version </span><span class="s3">is not None</span><span class="s1">:</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">packaging.version.Version(version)</span>
+            <span class="s3">except </span><span class="s1">(packaging.version.InvalidVersion</span><span class="s3">, </span><span class="s1">TypeError):</span>
+                <span class="s1">warnings.warn(</span>
+                    <span class="s2">&quot;The version specified (%r) is an invalid version, this &quot;</span>
+                    <span class="s2">&quot;may not work as expected with newer versions of &quot;</span>
+                    <span class="s2">&quot;setuptools, pip, and PyPI. Please see PEP 440 for more &quot;</span>
+                    <span class="s2">&quot;details.&quot; </span><span class="s1">% version</span>
+                <span class="s1">)</span>
+                <span class="s3">return </span><span class="s1">setuptools.sic(version)</span>
+        <span class="s3">return </span><span class="s1">version</span>
+
+    <span class="s3">def </span><span class="s1">_finalize_requires(self):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Set `metadata.python_requires` and fix environment markers 
+        in `install_requires` and `extras_require`. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">getattr(self</span><span class="s3">, </span><span class="s2">'python_requires'</span><span class="s3">, None</span><span class="s1">):</span>
+            <span class="s1">self.metadata.python_requires = self.python_requires</span>
+
+        <span class="s3">if </span><span class="s1">getattr(self</span><span class="s3">, </span><span class="s2">'extras_require'</span><span class="s3">, None</span><span class="s1">):</span>
+            <span class="s3">for </span><span class="s1">extra </span><span class="s3">in </span><span class="s1">self.extras_require.keys():</span>
+                <span class="s0"># Since this gets called multiple times at points where the</span>
+                <span class="s0"># keys have become 'converted' extras, ensure that we are only</span>
+                <span class="s0"># truly adding extras we haven't seen before here.</span>
+                <span class="s1">extra = extra.split(</span><span class="s2">':'</span><span class="s1">)[</span><span class="s5">0</span><span class="s1">]</span>
+                <span class="s3">if </span><span class="s1">extra:</span>
+                    <span class="s1">self.metadata.provides_extras.add(extra)</span>
+
+        <span class="s1">self._convert_extras_requirements()</span>
+        <span class="s1">self._move_install_requirements_markers()</span>
+
+    <span class="s3">def </span><span class="s1">_convert_extras_requirements(self):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Convert requirements in `extras_require` of the form 
+        `&quot;extra&quot;: [&quot;barbazquux; {marker}&quot;]` to 
+        `&quot;extra:{marker}&quot;: [&quot;barbazquux&quot;]`. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">spec_ext_reqs = getattr(self</span><span class="s3">, </span><span class="s2">'extras_require'</span><span class="s3">, None</span><span class="s1">) </span><span class="s3">or </span><span class="s1">{}</span>
+        <span class="s1">self._tmp_extras_require = defaultdict(list)</span>
+        <span class="s3">for </span><span class="s1">section</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">spec_ext_reqs.items():</span>
+            <span class="s0"># Do not strip empty sections.</span>
+            <span class="s1">self._tmp_extras_require[section]</span>
+            <span class="s3">for </span><span class="s1">r </span><span class="s3">in </span><span class="s1">pkg_resources.parse_requirements(v):</span>
+                <span class="s1">suffix = self._suffix_for(r)</span>
+                <span class="s1">self._tmp_extras_require[section + suffix].append(r)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_suffix_for(req):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        For a requirement, return the 'extras_require' suffix for 
+        that requirement. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">return </span><span class="s2">':' </span><span class="s1">+ str(req.marker) </span><span class="s3">if </span><span class="s1">req.marker </span><span class="s3">else </span><span class="s2">''</span>
+
+    <span class="s3">def </span><span class="s1">_move_install_requirements_markers(self):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Move requirements in `install_requires` that are using environment 
+        markers `extras_require`. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0"># divide the install_requires into two sets, simple ones still</span>
+        <span class="s0"># handled by install_requires and more complex ones handled</span>
+        <span class="s0"># by extras_require.</span>
+
+        <span class="s3">def </span><span class="s1">is_simple_req(req):</span>
+            <span class="s3">return not </span><span class="s1">req.marker</span>
+
+        <span class="s1">spec_inst_reqs = getattr(self</span><span class="s3">, </span><span class="s2">'install_requires'</span><span class="s3">, None</span><span class="s1">) </span><span class="s3">or </span><span class="s1">()</span>
+        <span class="s1">inst_reqs = list(pkg_resources.parse_requirements(spec_inst_reqs))</span>
+        <span class="s1">simple_reqs = filter(is_simple_req</span><span class="s3">, </span><span class="s1">inst_reqs)</span>
+        <span class="s1">complex_reqs = filterfalse(is_simple_req</span><span class="s3">, </span><span class="s1">inst_reqs)</span>
+        <span class="s1">self.install_requires = list(map(str</span><span class="s3">, </span><span class="s1">simple_reqs))</span>
+
+        <span class="s3">for </span><span class="s1">r </span><span class="s3">in </span><span class="s1">complex_reqs:</span>
+            <span class="s1">self._tmp_extras_require[</span><span class="s2">':' </span><span class="s1">+ str(r.marker)].append(r)</span>
+        <span class="s1">self.extras_require = dict(</span>
+            <span class="s1">(k</span><span class="s3">, </span><span class="s1">[str(r) </span><span class="s3">for </span><span class="s1">r </span><span class="s3">in </span><span class="s1">map(self._clean_req</span><span class="s3">, </span><span class="s1">v)])</span>
+            <span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">self._tmp_extras_require.items()</span>
+        <span class="s1">)</span>
+
+    <span class="s3">def </span><span class="s1">_clean_req(self</span><span class="s3">, </span><span class="s1">req):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Given a Requirement, remove environment markers and return it. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">req.marker = </span><span class="s3">None</span>
+        <span class="s3">return </span><span class="s1">req</span>
+
+    <span class="s3">def </span><span class="s1">_parse_config_files(self</span><span class="s3">, </span><span class="s1">filenames=</span><span class="s3">None</span><span class="s1">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Adapted from distutils.dist.Distribution.parse_config_files, 
+        this method provides the same functionality in subtly-improved 
+        ways. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">from </span><span class="s1">setuptools.extern.six.moves.configparser </span><span class="s3">import </span><span class="s1">ConfigParser</span>
+
+        <span class="s0"># Ignore install directory options if we have a venv</span>
+        <span class="s3">if not </span><span class="s1">six.PY2 </span><span class="s3">and </span><span class="s1">sys.prefix != sys.base_prefix:</span>
+            <span class="s1">ignore_options = [</span>
+                <span class="s2">'install-base'</span><span class="s3">, </span><span class="s2">'install-platbase'</span><span class="s3">, </span><span class="s2">'install-lib'</span><span class="s3">,</span>
+                <span class="s2">'install-platlib'</span><span class="s3">, </span><span class="s2">'install-purelib'</span><span class="s3">, </span><span class="s2">'install-headers'</span><span class="s3">,</span>
+                <span class="s2">'install-scripts'</span><span class="s3">, </span><span class="s2">'install-data'</span><span class="s3">, </span><span class="s2">'prefix'</span><span class="s3">, </span><span class="s2">'exec-prefix'</span><span class="s3">,</span>
+                <span class="s2">'home'</span><span class="s3">, </span><span class="s2">'user'</span><span class="s3">, </span><span class="s2">'root'</span><span class="s1">]</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">ignore_options = []</span>
+
+        <span class="s1">ignore_options = frozenset(ignore_options)</span>
+
+        <span class="s3">if </span><span class="s1">filenames </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s1">filenames = self.find_config_files()</span>
+
+        <span class="s3">if </span><span class="s1">DEBUG:</span>
+            <span class="s1">self.announce(</span><span class="s2">&quot;Distribution.parse_config_files():&quot;</span><span class="s1">)</span>
+
+        <span class="s1">parser = ConfigParser()</span>
+        <span class="s3">for </span><span class="s1">filename </span><span class="s3">in </span><span class="s1">filenames:</span>
+            <span class="s3">with </span><span class="s1">io.open(filename</span><span class="s3">, </span><span class="s1">encoding=</span><span class="s2">'utf-8'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">reader:</span>
+                <span class="s3">if </span><span class="s1">DEBUG:</span>
+                    <span class="s1">self.announce(</span><span class="s2">&quot;  reading {filename}&quot;</span><span class="s1">.format(**locals()))</span>
+                <span class="s1">(parser.readfp </span><span class="s3">if </span><span class="s1">six.PY2 </span><span class="s3">else </span><span class="s1">parser.read_file)(reader)</span>
+            <span class="s3">for </span><span class="s1">section </span><span class="s3">in </span><span class="s1">parser.sections():</span>
+                <span class="s1">options = parser.options(section)</span>
+                <span class="s1">opt_dict = self.get_option_dict(section)</span>
+
+                <span class="s3">for </span><span class="s1">opt </span><span class="s3">in </span><span class="s1">options:</span>
+                    <span class="s3">if </span><span class="s1">opt != </span><span class="s2">'__name__' </span><span class="s3">and </span><span class="s1">opt </span><span class="s3">not in </span><span class="s1">ignore_options:</span>
+                        <span class="s1">val = self._try_str(parser.get(section</span><span class="s3">, </span><span class="s1">opt))</span>
+                        <span class="s1">opt = opt.replace(</span><span class="s2">'-'</span><span class="s3">, </span><span class="s2">'_'</span><span class="s1">)</span>
+                        <span class="s1">opt_dict[opt] = (filename</span><span class="s3">, </span><span class="s1">val)</span>
+
+            <span class="s0"># Make the ConfigParser forget everything (so we retain</span>
+            <span class="s0"># the original filenames that options come from)</span>
+            <span class="s1">parser.__init__()</span>
+
+        <span class="s0"># If there was a &quot;global&quot; section in the config file, use it</span>
+        <span class="s0"># to set Distribution options.</span>
+
+        <span class="s3">if </span><span class="s2">'global' </span><span class="s3">in </span><span class="s1">self.command_options:</span>
+            <span class="s3">for </span><span class="s1">(opt</span><span class="s3">, </span><span class="s1">(src</span><span class="s3">, </span><span class="s1">val)) </span><span class="s3">in </span><span class="s1">self.command_options[</span><span class="s2">'global'</span><span class="s1">].items():</span>
+                <span class="s1">alias = self.negative_opt.get(opt)</span>
+                <span class="s3">try</span><span class="s1">:</span>
+                    <span class="s3">if </span><span class="s1">alias:</span>
+                        <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">alias</span><span class="s3">, not </span><span class="s1">strtobool(val))</span>
+                    <span class="s3">elif </span><span class="s1">opt </span><span class="s3">in </span><span class="s1">(</span><span class="s2">'verbose'</span><span class="s3">, </span><span class="s2">'dry_run'</span><span class="s1">):  </span><span class="s0"># ugh!</span>
+                        <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">opt</span><span class="s3">, </span><span class="s1">strtobool(val))</span>
+                    <span class="s3">else</span><span class="s1">:</span>
+                        <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">opt</span><span class="s3">, </span><span class="s1">val)</span>
+                <span class="s3">except </span><span class="s1">ValueError </span><span class="s3">as </span><span class="s1">msg:</span>
+                    <span class="s3">raise </span><span class="s1">DistutilsOptionError(msg)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s3">def </span><span class="s1">_try_str(val):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        On Python 2, much of distutils relies on string values being of 
+        type 'str' (bytes) and not unicode text. If the value can be safely 
+        encoded to bytes using the default encoding, prefer that. 
+ 
+        Why the default encoding? Because that value can be implicitly 
+        decoded back to text if needed. 
+ 
+        Ref #1653 
+        &quot;&quot;&quot;</span>
+        <span class="s3">if not </span><span class="s1">six.PY2:</span>
+            <span class="s3">return </span><span class="s1">val</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">val.encode()</span>
+        <span class="s3">except </span><span class="s1">UnicodeEncodeError:</span>
+            <span class="s3">pass</span>
+        <span class="s3">return </span><span class="s1">val</span>
+
+    <span class="s3">def </span><span class="s1">_set_command_options(self</span><span class="s3">, </span><span class="s1">command_obj</span><span class="s3">, </span><span class="s1">option_dict=</span><span class="s3">None</span><span class="s1">):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Set the options for 'command_obj' from 'option_dict'.  Basically 
+        this means copying elements of a dictionary ('option_dict') to 
+        attributes of an instance ('command'). 
+ 
+        'command_obj' must be a Command instance.  If 'option_dict' is not 
+        supplied, uses the standard option dictionary for this command 
+        (from 'self.command_options'). 
+ 
+        (Adopted from distutils.dist.Distribution._set_command_options) 
+        &quot;&quot;&quot;</span>
+        <span class="s1">command_name = command_obj.get_command_name()</span>
+        <span class="s3">if </span><span class="s1">option_dict </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s1">option_dict = self.get_option_dict(command_name)</span>
+
+        <span class="s3">if </span><span class="s1">DEBUG:</span>
+            <span class="s1">self.announce(</span><span class="s2">&quot;  setting options for '%s' command:&quot; </span><span class="s1">% command_name)</span>
+        <span class="s3">for </span><span class="s1">(option</span><span class="s3">, </span><span class="s1">(source</span><span class="s3">, </span><span class="s1">value)) </span><span class="s3">in </span><span class="s1">option_dict.items():</span>
+            <span class="s3">if </span><span class="s1">DEBUG:</span>
+                <span class="s1">self.announce(</span><span class="s2">&quot;    %s = %s (from %s)&quot; </span><span class="s1">% (option</span><span class="s3">, </span><span class="s1">value</span><span class="s3">,</span>
+                                                         <span class="s1">source))</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">bool_opts = [translate_longopt(o)</span>
+                             <span class="s3">for </span><span class="s1">o </span><span class="s3">in </span><span class="s1">command_obj.boolean_options]</span>
+            <span class="s3">except </span><span class="s1">AttributeError:</span>
+                <span class="s1">bool_opts = []</span>
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">neg_opt = command_obj.negative_opt</span>
+            <span class="s3">except </span><span class="s1">AttributeError:</span>
+                <span class="s1">neg_opt = {}</span>
+
+            <span class="s3">try</span><span class="s1">:</span>
+                <span class="s1">is_string = isinstance(value</span><span class="s3">, </span><span class="s1">six.string_types)</span>
+                <span class="s3">if </span><span class="s1">option </span><span class="s3">in </span><span class="s1">neg_opt </span><span class="s3">and </span><span class="s1">is_string:</span>
+                    <span class="s1">setattr(command_obj</span><span class="s3">, </span><span class="s1">neg_opt[option]</span><span class="s3">, not </span><span class="s1">strtobool(value))</span>
+                <span class="s3">elif </span><span class="s1">option </span><span class="s3">in </span><span class="s1">bool_opts </span><span class="s3">and </span><span class="s1">is_string:</span>
+                    <span class="s1">setattr(command_obj</span><span class="s3">, </span><span class="s1">option</span><span class="s3">, </span><span class="s1">strtobool(value))</span>
+                <span class="s3">elif </span><span class="s1">hasattr(command_obj</span><span class="s3">, </span><span class="s1">option):</span>
+                    <span class="s1">setattr(command_obj</span><span class="s3">, </span><span class="s1">option</span><span class="s3">, </span><span class="s1">value)</span>
+                <span class="s3">else</span><span class="s1">:</span>
+                    <span class="s3">raise </span><span class="s1">DistutilsOptionError(</span>
+                        <span class="s2">&quot;error in %s: command '%s' has no such option '%s'&quot;</span>
+                        <span class="s1">% (source</span><span class="s3">, </span><span class="s1">command_name</span><span class="s3">, </span><span class="s1">option))</span>
+            <span class="s3">except </span><span class="s1">ValueError </span><span class="s3">as </span><span class="s1">msg:</span>
+                <span class="s3">raise </span><span class="s1">DistutilsOptionError(msg)</span>
+
+    <span class="s3">def </span><span class="s1">parse_config_files(self</span><span class="s3">, </span><span class="s1">filenames=</span><span class="s3">None, </span><span class="s1">ignore_option_errors=</span><span class="s3">False</span><span class="s1">):</span>
+        <span class="s4">&quot;&quot;&quot;Parses configuration files from various levels 
+        and loads configuration. 
+ 
+        &quot;&quot;&quot;</span>
+        <span class="s1">self._parse_config_files(filenames=filenames)</span>
+
+        <span class="s1">parse_configuration(self</span><span class="s3">, </span><span class="s1">self.command_options</span><span class="s3">,</span>
+                            <span class="s1">ignore_option_errors=ignore_option_errors)</span>
+        <span class="s1">self._finalize_requires()</span>
+
+    <span class="s3">def </span><span class="s1">fetch_build_eggs(self</span><span class="s3">, </span><span class="s1">requires):</span>
+        <span class="s4">&quot;&quot;&quot;Resolve pre-setup requirements&quot;&quot;&quot;</span>
+        <span class="s1">resolved_dists = pkg_resources.working_set.resolve(</span>
+            <span class="s1">pkg_resources.parse_requirements(requires)</span><span class="s3">,</span>
+            <span class="s1">installer=self.fetch_build_egg</span><span class="s3">,</span>
+            <span class="s1">replace_conflicting=</span><span class="s3">True,</span>
+        <span class="s1">)</span>
+        <span class="s3">for </span><span class="s1">dist </span><span class="s3">in </span><span class="s1">resolved_dists:</span>
+            <span class="s1">pkg_resources.working_set.add(dist</span><span class="s3">, </span><span class="s1">replace=</span><span class="s3">True</span><span class="s1">)</span>
+        <span class="s3">return </span><span class="s1">resolved_dists</span>
+
+    <span class="s3">def </span><span class="s1">finalize_options(self):</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Allow plugins to apply arbitrary operations to the 
+        distribution. Each hook may optionally define a 'order' 
+        to influence the order of execution. Smaller numbers 
+        go first and the default is 0. 
+        &quot;&quot;&quot;</span>
+        <span class="s1">group = </span><span class="s2">'setuptools.finalize_distribution_options'</span>
+
+        <span class="s3">def </span><span class="s1">by_order(hook):</span>
+            <span class="s3">return </span><span class="s1">getattr(hook</span><span class="s3">, </span><span class="s2">'order'</span><span class="s3">, </span><span class="s5">0</span><span class="s1">)</span>
+        <span class="s1">eps = map(</span><span class="s3">lambda </span><span class="s1">e: e.load()</span><span class="s3">, </span><span class="s1">pkg_resources.iter_entry_points(group))</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">sorted(eps</span><span class="s3">, </span><span class="s1">key=by_order):</span>
+            <span class="s1">ep(self)</span>
+
+    <span class="s3">def </span><span class="s1">_finalize_setup_keywords(self):</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">pkg_resources.iter_entry_points(</span><span class="s2">'distutils.setup_keywords'</span><span class="s1">):</span>
+            <span class="s1">value = getattr(self</span><span class="s3">, </span><span class="s1">ep.name</span><span class="s3">, None</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">value </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s1">ep.require(installer=self.fetch_build_egg)</span>
+                <span class="s1">ep.load()(self</span><span class="s3">, </span><span class="s1">ep.name</span><span class="s3">, </span><span class="s1">value)</span>
+
+    <span class="s3">def </span><span class="s1">_finalize_2to3_doctests(self):</span>
+        <span class="s3">if </span><span class="s1">getattr(self</span><span class="s3">, </span><span class="s2">'convert_2to3_doctests'</span><span class="s3">, None</span><span class="s1">):</span>
+            <span class="s0"># XXX may convert to set here when we can rely on set being builtin</span>
+            <span class="s1">self.convert_2to3_doctests = [</span>
+                <span class="s1">os.path.abspath(p)</span>
+                <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">self.convert_2to3_doctests</span>
+            <span class="s1">]</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">self.convert_2to3_doctests = []</span>
+
+    <span class="s3">def </span><span class="s1">get_egg_cache_dir(self):</span>
+        <span class="s1">egg_cache_dir = os.path.join(os.curdir</span><span class="s3">, </span><span class="s2">'.eggs'</span><span class="s1">)</span>
+        <span class="s3">if not </span><span class="s1">os.path.exists(egg_cache_dir):</span>
+            <span class="s1">os.mkdir(egg_cache_dir)</span>
+            <span class="s1">windows_support.hide_file(egg_cache_dir)</span>
+            <span class="s1">readme_txt_filename = os.path.join(egg_cache_dir</span><span class="s3">, </span><span class="s2">'README.txt'</span><span class="s1">)</span>
+            <span class="s3">with </span><span class="s1">open(readme_txt_filename</span><span class="s3">, </span><span class="s2">'w'</span><span class="s1">) </span><span class="s3">as </span><span class="s1">f:</span>
+                <span class="s1">f.write(</span><span class="s2">'This directory contains eggs that were downloaded '</span>
+                        <span class="s2">'by setuptools to build, test, and run plug-ins.</span><span class="s3">\n\n</span><span class="s2">'</span><span class="s1">)</span>
+                <span class="s1">f.write(</span><span class="s2">'This directory caches those eggs to prevent '</span>
+                        <span class="s2">'repeated downloads.</span><span class="s3">\n\n</span><span class="s2">'</span><span class="s1">)</span>
+                <span class="s1">f.write(</span><span class="s2">'However, it is safe to delete this directory.</span><span class="s3">\n\n</span><span class="s2">'</span><span class="s1">)</span>
+
+        <span class="s3">return </span><span class="s1">egg_cache_dir</span>
+
+    <span class="s3">def </span><span class="s1">fetch_build_egg(self</span><span class="s3">, </span><span class="s1">req):</span>
+        <span class="s4">&quot;&quot;&quot;Fetch an egg needed for building&quot;&quot;&quot;</span>
+        <span class="s3">from </span><span class="s1">setuptools.installer </span><span class="s3">import </span><span class="s1">fetch_build_egg</span>
+        <span class="s3">return </span><span class="s1">fetch_build_egg(self</span><span class="s3">, </span><span class="s1">req)</span>
+
+    <span class="s3">def </span><span class="s1">get_command_class(self</span><span class="s3">, </span><span class="s1">command):</span>
+        <span class="s4">&quot;&quot;&quot;Pluggable version of get_command_class()&quot;&quot;&quot;</span>
+        <span class="s3">if </span><span class="s1">command </span><span class="s3">in </span><span class="s1">self.cmdclass:</span>
+            <span class="s3">return </span><span class="s1">self.cmdclass[command]</span>
+
+        <span class="s1">eps = pkg_resources.iter_entry_points(</span><span class="s2">'distutils.commands'</span><span class="s3">, </span><span class="s1">command)</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">eps:</span>
+            <span class="s1">ep.require(installer=self.fetch_build_egg)</span>
+            <span class="s1">self.cmdclass[command] = cmdclass = ep.load()</span>
+            <span class="s3">return </span><span class="s1">cmdclass</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">_Distribution.get_command_class(self</span><span class="s3">, </span><span class="s1">command)</span>
+
+    <span class="s3">def </span><span class="s1">print_commands(self):</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">pkg_resources.iter_entry_points(</span><span class="s2">'distutils.commands'</span><span class="s1">):</span>
+            <span class="s3">if </span><span class="s1">ep.name </span><span class="s3">not in </span><span class="s1">self.cmdclass:</span>
+                <span class="s0"># don't require extras as the commands won't be invoked</span>
+                <span class="s1">cmdclass = ep.resolve()</span>
+                <span class="s1">self.cmdclass[ep.name] = cmdclass</span>
+        <span class="s3">return </span><span class="s1">_Distribution.print_commands(self)</span>
+
+    <span class="s3">def </span><span class="s1">get_command_list(self):</span>
+        <span class="s3">for </span><span class="s1">ep </span><span class="s3">in </span><span class="s1">pkg_resources.iter_entry_points(</span><span class="s2">'distutils.commands'</span><span class="s1">):</span>
+            <span class="s3">if </span><span class="s1">ep.name </span><span class="s3">not in </span><span class="s1">self.cmdclass:</span>
+                <span class="s0"># don't require extras as the commands won't be invoked</span>
+                <span class="s1">cmdclass = ep.resolve()</span>
+                <span class="s1">self.cmdclass[ep.name] = cmdclass</span>
+        <span class="s3">return </span><span class="s1">_Distribution.get_command_list(self)</span>
+
+    <span class="s3">def </span><span class="s1">include(self</span><span class="s3">, </span><span class="s1">**attrs):</span>
+        <span class="s4">&quot;&quot;&quot;Add items to distribution that are named in keyword arguments 
+ 
+        For example, 'dist.include(py_modules=[&quot;x&quot;])' would add 'x' to 
+        the distribution's 'py_modules' attribute, if it was not already 
+        there. 
+ 
+        Currently, this method only supports inclusion for attributes that are 
+        lists or tuples.  If you need to add support for adding to other 
+        attributes in this or a subclass, you can add an '_include_X' method, 
+        where 'X' is the name of the attribute.  The method will be called with 
+        the value passed to 'include()'.  So, 'dist.include(foo={&quot;bar&quot;:&quot;baz&quot;})' 
+        will try to call 'dist._include_foo({&quot;bar&quot;:&quot;baz&quot;})', which can then 
+        handle whatever special inclusion logic is needed. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">attrs.items():</span>
+            <span class="s1">include = getattr(self</span><span class="s3">, </span><span class="s2">'_include_' </span><span class="s1">+ k</span><span class="s3">, None</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">include:</span>
+                <span class="s1">include(v)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self._include_misc(k</span><span class="s3">, </span><span class="s1">v)</span>
+
+    <span class="s3">def </span><span class="s1">exclude_package(self</span><span class="s3">, </span><span class="s1">package):</span>
+        <span class="s4">&quot;&quot;&quot;Remove packages, modules, and extensions in named package&quot;&quot;&quot;</span>
+
+        <span class="s1">pfx = package + </span><span class="s2">'.'</span>
+        <span class="s3">if </span><span class="s1">self.packages:</span>
+            <span class="s1">self.packages = [</span>
+                <span class="s1">p </span><span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">self.packages</span>
+                <span class="s3">if </span><span class="s1">p != package </span><span class="s3">and not </span><span class="s1">p.startswith(pfx)</span>
+            <span class="s1">]</span>
+
+        <span class="s3">if </span><span class="s1">self.py_modules:</span>
+            <span class="s1">self.py_modules = [</span>
+                <span class="s1">p </span><span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">self.py_modules</span>
+                <span class="s3">if </span><span class="s1">p != package </span><span class="s3">and not </span><span class="s1">p.startswith(pfx)</span>
+            <span class="s1">]</span>
+
+        <span class="s3">if </span><span class="s1">self.ext_modules:</span>
+            <span class="s1">self.ext_modules = [</span>
+                <span class="s1">p </span><span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">self.ext_modules</span>
+                <span class="s3">if </span><span class="s1">p.name != package </span><span class="s3">and not </span><span class="s1">p.name.startswith(pfx)</span>
+            <span class="s1">]</span>
+
+    <span class="s3">def </span><span class="s1">has_contents_for(self</span><span class="s3">, </span><span class="s1">package):</span>
+        <span class="s4">&quot;&quot;&quot;Return true if 'exclude_package(package)' would do something&quot;&quot;&quot;</span>
+
+        <span class="s1">pfx = package + </span><span class="s2">'.'</span>
+
+        <span class="s3">for </span><span class="s1">p </span><span class="s3">in </span><span class="s1">self.iter_distribution_names():</span>
+            <span class="s3">if </span><span class="s1">p == package </span><span class="s3">or </span><span class="s1">p.startswith(pfx):</span>
+                <span class="s3">return True</span>
+
+    <span class="s3">def </span><span class="s1">_exclude_misc(self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">value):</span>
+        <span class="s4">&quot;&quot;&quot;Handle 'exclude()' for list/tuple attrs without a special handler&quot;&quot;&quot;</span>
+        <span class="s3">if not </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">sequence):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;%s: setting must be a list or tuple (%r)&quot; </span><span class="s1">% (name</span><span class="s3">, </span><span class="s1">value)</span>
+            <span class="s1">)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">old = getattr(self</span><span class="s3">, </span><span class="s1">name)</span>
+        <span class="s3">except </span><span class="s1">AttributeError:</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;%s: No such distribution setting&quot; </span><span class="s1">% name</span>
+            <span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">old </span><span class="s3">is not None and not </span><span class="s1">isinstance(old</span><span class="s3">, </span><span class="s1">sequence):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s1">name + </span><span class="s2">&quot;: this setting cannot be changed via include/exclude&quot;</span>
+            <span class="s1">)</span>
+        <span class="s3">elif </span><span class="s1">old:</span>
+            <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">[item </span><span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">old </span><span class="s3">if </span><span class="s1">item </span><span class="s3">not in </span><span class="s1">value])</span>
+
+    <span class="s3">def </span><span class="s1">_include_misc(self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">value):</span>
+        <span class="s4">&quot;&quot;&quot;Handle 'include()' for list/tuple attrs without a special handler&quot;&quot;&quot;</span>
+
+        <span class="s3">if not </span><span class="s1">isinstance(value</span><span class="s3">, </span><span class="s1">sequence):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;%s: setting must be a list (%r)&quot; </span><span class="s1">% (name</span><span class="s3">, </span><span class="s1">value)</span>
+            <span class="s1">)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s1">old = getattr(self</span><span class="s3">, </span><span class="s1">name)</span>
+        <span class="s3">except </span><span class="s1">AttributeError:</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;%s: No such distribution setting&quot; </span><span class="s1">% name</span>
+            <span class="s1">)</span>
+        <span class="s3">if </span><span class="s1">old </span><span class="s3">is None</span><span class="s1">:</span>
+            <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">value)</span>
+        <span class="s3">elif not </span><span class="s1">isinstance(old</span><span class="s3">, </span><span class="s1">sequence):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s1">name + </span><span class="s2">&quot;: this setting cannot be changed via include/exclude&quot;</span>
+            <span class="s1">)</span>
+        <span class="s3">else</span><span class="s1">:</span>
+            <span class="s1">new = [item </span><span class="s3">for </span><span class="s1">item </span><span class="s3">in </span><span class="s1">value </span><span class="s3">if </span><span class="s1">item </span><span class="s3">not in </span><span class="s1">old]</span>
+            <span class="s1">setattr(self</span><span class="s3">, </span><span class="s1">name</span><span class="s3">, </span><span class="s1">old + new)</span>
+
+    <span class="s3">def </span><span class="s1">exclude(self</span><span class="s3">, </span><span class="s1">**attrs):</span>
+        <span class="s4">&quot;&quot;&quot;Remove items from distribution that are named in keyword arguments 
+ 
+        For example, 'dist.exclude(py_modules=[&quot;x&quot;])' would remove 'x' from 
+        the distribution's 'py_modules' attribute.  Excluding packages uses 
+        the 'exclude_package()' method, so all of the package's contained 
+        packages, modules, and extensions are also excluded. 
+ 
+        Currently, this method only supports exclusion from attributes that are 
+        lists or tuples.  If you need to add support for excluding from other 
+        attributes in this or a subclass, you can add an '_exclude_X' method, 
+        where 'X' is the name of the attribute.  The method will be called with 
+        the value passed to 'exclude()'.  So, 'dist.exclude(foo={&quot;bar&quot;:&quot;baz&quot;})' 
+        will try to call 'dist._exclude_foo({&quot;bar&quot;:&quot;baz&quot;})', which can then 
+        handle whatever special exclusion logic is needed. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">for </span><span class="s1">k</span><span class="s3">, </span><span class="s1">v </span><span class="s3">in </span><span class="s1">attrs.items():</span>
+            <span class="s1">exclude = getattr(self</span><span class="s3">, </span><span class="s2">'_exclude_' </span><span class="s1">+ k</span><span class="s3">, None</span><span class="s1">)</span>
+            <span class="s3">if </span><span class="s1">exclude:</span>
+                <span class="s1">exclude(v)</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">self._exclude_misc(k</span><span class="s3">, </span><span class="s1">v)</span>
+
+    <span class="s3">def </span><span class="s1">_exclude_packages(self</span><span class="s3">, </span><span class="s1">packages):</span>
+        <span class="s3">if not </span><span class="s1">isinstance(packages</span><span class="s3">, </span><span class="s1">sequence):</span>
+            <span class="s3">raise </span><span class="s1">DistutilsSetupError(</span>
+                <span class="s2">&quot;packages: setting must be a list or tuple (%r)&quot; </span><span class="s1">% (packages</span><span class="s3">,</span><span class="s1">)</span>
+            <span class="s1">)</span>
+        <span class="s1">list(map(self.exclude_package</span><span class="s3">, </span><span class="s1">packages))</span>
+
+    <span class="s3">def </span><span class="s1">_parse_command_opts(self</span><span class="s3">, </span><span class="s1">parser</span><span class="s3">, </span><span class="s1">args):</span>
+        <span class="s0"># Remove --with-X/--without-X options when processing command args</span>
+        <span class="s1">self.global_options = self.__class__.global_options</span>
+        <span class="s1">self.negative_opt = self.__class__.negative_opt</span>
+
+        <span class="s0"># First, expand any aliases</span>
+        <span class="s1">command = args[</span><span class="s5">0</span><span class="s1">]</span>
+        <span class="s1">aliases = self.get_option_dict(</span><span class="s2">'aliases'</span><span class="s1">)</span>
+        <span class="s3">while </span><span class="s1">command </span><span class="s3">in </span><span class="s1">aliases:</span>
+            <span class="s1">src</span><span class="s3">, </span><span class="s1">alias = aliases[command]</span>
+            <span class="s3">del </span><span class="s1">aliases[command]  </span><span class="s0"># ensure each alias can expand only once!</span>
+            <span class="s3">import </span><span class="s1">shlex</span>
+            <span class="s1">args[:</span><span class="s5">1</span><span class="s1">] = shlex.split(alias</span><span class="s3">, True</span><span class="s1">)</span>
+            <span class="s1">command = args[</span><span class="s5">0</span><span class="s1">]</span>
+
+        <span class="s1">nargs = _Distribution._parse_command_opts(self</span><span class="s3">, </span><span class="s1">parser</span><span class="s3">, </span><span class="s1">args)</span>
+
+        <span class="s0"># Handle commands that want to consume all remaining arguments</span>
+        <span class="s1">cmd_class = self.get_command_class(command)</span>
+        <span class="s3">if </span><span class="s1">getattr(cmd_class</span><span class="s3">, </span><span class="s2">'command_consumes_arguments'</span><span class="s3">, None</span><span class="s1">):</span>
+            <span class="s1">self.get_option_dict(command)[</span><span class="s2">'args'</span><span class="s1">] = (</span><span class="s2">&quot;command line&quot;</span><span class="s3">, </span><span class="s1">nargs)</span>
+            <span class="s3">if </span><span class="s1">nargs </span><span class="s3">is not None</span><span class="s1">:</span>
+                <span class="s3">return </span><span class="s1">[]</span>
+
+        <span class="s3">return </span><span class="s1">nargs</span>
+
+    <span class="s3">def </span><span class="s1">get_cmdline_options(self):</span>
+        <span class="s4">&quot;&quot;&quot;Return a '{cmd: {opt:val}}' map of all command-line options 
+ 
+        Option names are all long, but do not include the leading '--', and 
+        contain dashes rather than underscores.  If the option doesn't take 
+        an argument (e.g. '--quiet'), the 'val' is 'None'. 
+ 
+        Note that options provided by config files are intentionally excluded. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s1">d = {}</span>
+
+        <span class="s3">for </span><span class="s1">cmd</span><span class="s3">, </span><span class="s1">opts </span><span class="s3">in </span><span class="s1">self.command_options.items():</span>
+
+            <span class="s3">for </span><span class="s1">opt</span><span class="s3">, </span><span class="s1">(src</span><span class="s3">, </span><span class="s1">val) </span><span class="s3">in </span><span class="s1">opts.items():</span>
+
+                <span class="s3">if </span><span class="s1">src != </span><span class="s2">&quot;command line&quot;</span><span class="s1">:</span>
+                    <span class="s3">continue</span>
+
+                <span class="s1">opt = opt.replace(</span><span class="s2">'_'</span><span class="s3">, </span><span class="s2">'-'</span><span class="s1">)</span>
+
+                <span class="s3">if </span><span class="s1">val == </span><span class="s5">0</span><span class="s1">:</span>
+                    <span class="s1">cmdobj = self.get_command_obj(cmd)</span>
+                    <span class="s1">neg_opt = self.negative_opt.copy()</span>
+                    <span class="s1">neg_opt.update(getattr(cmdobj</span><span class="s3">, </span><span class="s2">'negative_opt'</span><span class="s3">, </span><span class="s1">{}))</span>
+                    <span class="s3">for </span><span class="s1">neg</span><span class="s3">, </span><span class="s1">pos </span><span class="s3">in </span><span class="s1">neg_opt.items():</span>
+                        <span class="s3">if </span><span class="s1">pos == opt:</span>
+                            <span class="s1">opt = neg</span>
+                            <span class="s1">val = </span><span class="s3">None</span>
+                            <span class="s3">break</span>
+                    <span class="s3">else</span><span class="s1">:</span>
+                        <span class="s3">raise </span><span class="s1">AssertionError(</span><span class="s2">&quot;Shouldn't be able to get here&quot;</span><span class="s1">)</span>
+
+                <span class="s3">elif </span><span class="s1">val == </span><span class="s5">1</span><span class="s1">:</span>
+                    <span class="s1">val = </span><span class="s3">None</span>
+
+                <span class="s1">d.setdefault(cmd</span><span class="s3">, </span><span class="s1">{})[opt] = val</span>
+
+        <span class="s3">return </span><span class="s1">d</span>
+
+    <span class="s3">def </span><span class="s1">iter_distribution_names(self):</span>
+        <span class="s4">&quot;&quot;&quot;Yield all packages, modules, and extension names in distribution&quot;&quot;&quot;</span>
+
+        <span class="s3">for </span><span class="s1">pkg </span><span class="s3">in </span><span class="s1">self.packages </span><span class="s3">or </span><span class="s1">():</span>
+            <span class="s3">yield </span><span class="s1">pkg</span>
+
+        <span class="s3">for </span><span class="s1">module </span><span class="s3">in </span><span class="s1">self.py_modules </span><span class="s3">or </span><span class="s1">():</span>
+            <span class="s3">yield </span><span class="s1">module</span>
+
+        <span class="s3">for </span><span class="s1">ext </span><span class="s3">in </span><span class="s1">self.ext_modules </span><span class="s3">or </span><span class="s1">():</span>
+            <span class="s3">if </span><span class="s1">isinstance(ext</span><span class="s3">, </span><span class="s1">tuple):</span>
+                <span class="s1">name</span><span class="s3">, </span><span class="s1">buildinfo = ext</span>
+            <span class="s3">else</span><span class="s1">:</span>
+                <span class="s1">name = ext.name</span>
+            <span class="s3">if </span><span class="s1">name.endswith(</span><span class="s2">'module'</span><span class="s1">):</span>
+                <span class="s1">name = name[:-</span><span class="s5">6</span><span class="s1">]</span>
+            <span class="s3">yield </span><span class="s1">name</span>
+
+    <span class="s3">def </span><span class="s1">handle_display_options(self</span><span class="s3">, </span><span class="s1">option_order):</span>
+        <span class="s4">&quot;&quot;&quot;If there were any non-global &quot;display-only&quot; options 
+        (--help-commands or the metadata display options) on the command 
+        line, display the requested info and return true; else return 
+        false. 
+        &quot;&quot;&quot;</span>
+        <span class="s3">import </span><span class="s1">sys</span>
+
+        <span class="s3">if </span><span class="s1">six.PY2 </span><span class="s3">or </span><span class="s1">self.help_commands:</span>
+            <span class="s3">return </span><span class="s1">_Distribution.handle_display_options(self</span><span class="s3">, </span><span class="s1">option_order)</span>
+
+        <span class="s0"># Stdout may be StringIO (e.g. in tests)</span>
+        <span class="s3">if not </span><span class="s1">isinstance(sys.stdout</span><span class="s3">, </span><span class="s1">io.TextIOWrapper):</span>
+            <span class="s3">return </span><span class="s1">_Distribution.handle_display_options(self</span><span class="s3">, </span><span class="s1">option_order)</span>
+
+        <span class="s0"># Don't wrap stdout if utf-8 is already the encoding. Provides</span>
+        <span class="s0">#  workaround for #334.</span>
+        <span class="s3">if </span><span class="s1">sys.stdout.encoding.lower() </span><span class="s3">in </span><span class="s1">(</span><span class="s2">'utf-8'</span><span class="s3">, </span><span class="s2">'utf8'</span><span class="s1">):</span>
+            <span class="s3">return </span><span class="s1">_Distribution.handle_display_options(self</span><span class="s3">, </span><span class="s1">option_order)</span>
+
+        <span class="s0"># Print metadata in UTF-8 no matter the platform</span>
+        <span class="s1">encoding = sys.stdout.encoding</span>
+        <span class="s1">errors = sys.stdout.errors</span>
+        <span class="s1">newline = sys.platform != </span><span class="s2">'win32' </span><span class="s3">and </span><span class="s2">'</span><span class="s3">\n</span><span class="s2">' </span><span class="s3">or None</span>
+        <span class="s1">line_buffering = sys.stdout.line_buffering</span>
+
+        <span class="s1">sys.stdout = io.TextIOWrapper(</span>
+            <span class="s1">sys.stdout.detach()</span><span class="s3">, </span><span class="s2">'utf-8'</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">, </span><span class="s1">newline</span><span class="s3">, </span><span class="s1">line_buffering)</span>
+        <span class="s3">try</span><span class="s1">:</span>
+            <span class="s3">return </span><span class="s1">_Distribution.handle_display_options(self</span><span class="s3">, </span><span class="s1">option_order)</span>
+        <span class="s3">finally</span><span class="s1">:</span>
+            <span class="s1">sys.stdout = io.TextIOWrapper(</span>
+                <span class="s1">sys.stdout.detach()</span><span class="s3">, </span><span class="s1">encoding</span><span class="s3">, </span><span class="s1">errors</span><span class="s3">, </span><span class="s1">newline</span><span class="s3">, </span><span class="s1">line_buffering)</span>
+
+
+<span class="s3">class </span><span class="s1">DistDeprecationWarning(SetuptoolsDeprecationWarning):</span>
+    <span class="s4">&quot;&quot;&quot;Class for warning about deprecations in dist in 
+    setuptools. Not ignored by default, unlike DeprecationWarning.&quot;&quot;&quot;</span>
+</pre>
+</body>
+</html>
