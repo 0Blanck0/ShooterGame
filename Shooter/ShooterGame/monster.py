@@ -2,6 +2,7 @@ import pygame
 import constant
 import random
 
+
 class Monster(pygame.sprite.Sprite):
 
     def __init__(self, game):
@@ -31,19 +32,19 @@ class Monster(pygame.sprite.Sprite):
             self.rect.x = constant.default_mummy_posX
             self.rect.y = constant.default_mummy_posY
             self.health = self.max_health
-            self.speed = self.speed + random.randint(-3, 3)
-            if self.speed > 7:
-                self.speed = 7
-            elif self.speed <= 1:
-                self.speed = 2
+            self.speed = self.speed + random.randint(-2, 2)
+            if self.speed > 5:
+                self.speed = 5
+            elif self.speed < 1:
+                self.speed = 1
 
     def update_health_bar(self, surface):
         # Definition of life bar color (rgb)
-        bar_color = (111,210,46)
-        background_bar_color = (0,0,0)
+        bar_color = (111, 210, 46)
+        background_bar_color = (0, 0, 0)
         # Definition of life bar position
-        bar_position = [self.rect.x+45, self.rect.y-5, self.health, 5]
-        background_bar_position = [self.rect.x+45, self.rect.y-5, self.max_health, 5]
+        bar_position = [self.rect.x + 45, self.rect.y - 5, self.health, 5]
+        background_bar_position = [self.rect.x + 45, self.rect.y - 5, self.max_health, 5]
         # Draw life bar
         pygame.draw.rect(surface, background_bar_color, background_bar_position)
         pygame.draw.rect(surface, bar_color, bar_position)

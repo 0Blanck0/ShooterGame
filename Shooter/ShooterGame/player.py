@@ -1,6 +1,7 @@
 import pygame
 import constant
 
+
 # Player class (all function for all player)
 
 class Player(pygame.sprite.Sprite):
@@ -23,16 +24,16 @@ class Player(pygame.sprite.Sprite):
         self.image = constant.player_image_sprite
         self.rect = self.image.get_rect()
         # Set default position on screen
-        self.rect.x = (constant.screen_width/2) - self.rect.width/2
-        self.rect.y = constant.screen_height - (265 - (self.rect.width/4))
+        self.rect.x = (constant.screen_width / 2) - self.rect.width / 2
+        self.rect.y = constant.screen_height - (265 - (self.rect.width / 4))
 
     def update_health_bar(self, surface):
         # Definition of life bar color (rgb)
-        bar_color = (111,210,46)
-        background_bar_color = (0,0,0)
+        bar_color = (111, 210, 46)
+        background_bar_color = (0, 0, 0)
         # Definition of life bar position
-        bar_position = [self.rect.x+45, self.rect.y-5, self.health, 5]
-        background_bar_position = [self.rect.x+45, self.rect.y-5, self.max_health, 5]
+        bar_position = [self.rect.x + 45, self.rect.y - 5, self.health, 5]
+        background_bar_position = [self.rect.x + 45, self.rect.y - 5, self.max_health, 5]
         # Draw life bar
         pygame.draw.rect(surface, background_bar_color, background_bar_position)
         pygame.draw.rect(surface, bar_color, bar_position)
@@ -77,12 +78,12 @@ class Bullet(pygame.sprite.Sprite):
         self.image = constant.bullet_image_sprite
         # Get and set size of bullet
         self.rect = self.image.get_rect()
-        self.width = int(self.rect.width/10)
-        self.height = int(self.rect.height/10)
+        self.width = int(self.rect.width / 10)
+        self.height = int(self.rect.height / 10)
         self.image = pygame.transform.scale(self.image, (self.width, self.height))
         # Set bullet position
-        self.rect.x = player.rect.x + (player.rect.width/3)
-        self.rect.y = player.rect.y + (player.rect.width/3)
+        self.rect.x = player.rect.x + (player.rect.width / 3)
+        self.rect.y = player.rect.y + (player.rect.width / 3)
         # Save image of sprite
         self.origin_image = self.image
 
@@ -105,4 +106,3 @@ class Bullet(pygame.sprite.Sprite):
         for monster in self.player.game.check_collision(self, self.player.game.all_mummy):
             self.remove()
             monster.damage(self.player.attack, self.player)
-            
