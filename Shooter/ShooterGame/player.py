@@ -26,17 +26,23 @@ class Player(pygame.sprite.Sprite):
         # Set default position on screen
         self.rect.x = (constant.screen_width / 2) - self.rect.width / 2
         self.rect.y = constant.screen_height - (265 - (self.rect.width / 4))
+        # Definition of life bar color (rgb)
+        self.bar_color = (111, 210, 46)
+        self.background_bar_color = (0, 0, 0)
 
     def update_health_bar(self, surface):
-        # Definition of life bar color (rgb)
-        bar_color = (111, 210, 46)
-        background_bar_color = (0, 0, 0)
         # Definition of life bar position
-        bar_position = [self.rect.x + 45, self.rect.y - 5, self.health, 5]
-        background_bar_position = [self.rect.x + 45, self.rect.y - 5, self.max_health, 5]
+        bar_position = [self.rect.x + 45, self.rect.y - 3, self.health, 5]
+        background_bar_position = [self.rect.x + 45, self.rect.y - 3, self.max_health, 5]
         # Draw life bar
-        pygame.draw.rect(surface, background_bar_color, background_bar_position)
-        pygame.draw.rect(surface, bar_color, bar_position)
+        pygame.draw.rect(surface, self.background_bar_color, background_bar_position)
+        pygame.draw.rect(surface, self.bar_color, bar_position)
+
+    def damage(self, amount):
+        if self.health > 0:
+            self.health -= amount
+        else:
+            self.bar_color = (0, 0, 0)
 
     def fire(self, direction):
         # Create new bullet in the game
@@ -86,6 +92,8 @@ class Bullet(pygame.sprite.Sprite):
         self.rect.y = player.rect.y + (player.rect.width / 3)
         # Save image of sprite
         self.origin_image = self.image
+        # Define knowback
+        self.knowback = 20
 
     def remove(self):
         # Remove actual select bullet
@@ -105,4 +113,4 @@ class Bullet(pygame.sprite.Sprite):
         # If bullet enter in collision with monster remove self
         for monster in self.player.game.check_collision(self, self.player.game.all_mummy):
             self.remove()
-            monster.damage(self.player.attack, self.player)
+            monster.damage(self.player.attack, self.player, self.knowback)
