@@ -11,6 +11,7 @@ screen_height = 720
 # Game variables
 game_name = "Shooter_Blanck"
 background_default = pygame.image.load('assets/bg.jpg')
+banner_default = pygame.image.load('assets/banner.png')
 player_image_sprite = pygame.image.load('assets/player.png')
 bullet_image_sprite = pygame.image.load('assets/projectile.png')
 mummy_image_sprite = pygame.image.load('assets/mummy.png')

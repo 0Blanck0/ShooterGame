@@ -26,8 +26,10 @@ class Player(pygame.sprite.Sprite):
         # Set default position on screen
         self.rect.x = (constant.screen_width / 2) - self.rect.width / 2
         self.rect.y = constant.screen_height - (265 - (self.rect.width / 4))
+        self.default_rect = self.rect
         # Definition of life bar color (rgb)
         self.bar_color = (111, 210, 46)
+        self.default_bar_color = (111, 210, 46)
         self.background_bar_color = (0, 0, 0)
 
     def update_health_bar(self, surface):
@@ -43,6 +45,9 @@ class Player(pygame.sprite.Sprite):
             self.health -= amount
         else:
             self.bar_color = (0, 0, 0)
+
+        if self.health < 1:
+            self.game.game_over()
 
     def fire(self, direction):
         # Create new bullet in the game
@@ -75,9 +80,9 @@ class Bullet(pygame.sprite.Sprite):
         self.player = player
         # speed of bullet
         if direction == "Right":
-            self.speed = 12
+            self.speed = 10
         elif direction == "Left":
-            self.speed = -12
+            self.speed = -10
         # Definition default angle of image
         self.angle = 0
         # Bullet image for sprite

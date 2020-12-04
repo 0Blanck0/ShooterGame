@@ -1,10 +1,15 @@
 import pygame
+import math
 import constant
 import game
 
 screen_width = constant.screen_width
 screen_height = constant.screen_height
 background = constant.background_default
+
+banner = constant.banner_default
+banner = pygame.transform.scale(banner, (500, 500))
+banner_rect = banner.get_rect()
 
 lastDir = "Right"
 running = True
@@ -16,6 +21,16 @@ pygame.init()
 pygame.display.set_caption(constant.game_name)
 screen = pygame.display.set_mode((screen_width, screen_height))
 
+banner_rect.x = math.ceil(screen.get_width() / 4)
+banner_rect.y = math.ceil(screen.get_height() / 4 - 100)
+
+# Generate button
+play_button = pygame.image.load('assets/button.png')
+play_button = pygame.transform.scale(play_button, (400, 150))
+play_button_rect = play_button.get_rect()
+play_button_rect.x = math.ceil(screen.get_width() / 3.33)
+play_button_rect.y = math.ceil(screen.get_height() / 1.6)
+
 game_var = game.Game()
 
 while running:
@@ -23,35 +38,12 @@ while running:
     # Apply background to game
     screen.blit(background, (0, -200))
 
-    # Apply player sprite in game
-    screen.blit(game_var.player.image, game_var.player.rect)
-    game_var.player.update_health_bar(screen)
-
-    # Apply monsters sprite in game
-    game_var.all_mummy.draw(screen)
-
-    # Get all bullet and move it
-    for bullets in game_var.player.all_bullet:
-        bullets.move()
-
-    # Get all monsters sprite in game
-    for monster in game_var.all_mummy:
-        monster.forward()
-        monster.update_health_bar(screen)
-
-    # Apply bullet
-    game_var.player.all_bullet.draw(screen)
-
-
-    # Check player direction
-    if game_var.pressed.get(pygame.K_RIGHT) and game_var.pressed.get(pygame.K_LEFT):
-        game_var.player.nothing_move()
-    elif game_var.pressed.get(pygame.K_RIGHT) and game_var.player.rect.x + (game_var.player.rect.width - 20) < screen.get_width():
-        game_var.player.move_right()
-        lastDir = "Right"
-    elif game_var.pressed.get(pygame.K_LEFT) and game_var.player.rect.x > -20:
-        lastDir = "Left"
-        game_var.player.move_left()
+    # Start game if is_playing is true
+    if game_var.is_playing:
+        game_var.update(screen)
+    else:
+        screen.blit(play_button, play_button_rect)
+        screen.blit(banner, banner_rect)
 
     # Update screen of game
     pygame.display.flip()
@@ -73,3 +65,7 @@ while running:
         # Disable press key
         elif event.type == pygame.KEYUP:
             game_var.pressed[event.key] = False
+        # Detection event mouse down
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if play_button_rect.collidepoint(event.pos):
+                game_var.start_game()

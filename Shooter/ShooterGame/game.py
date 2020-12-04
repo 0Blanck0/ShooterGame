@@ -7,6 +7,8 @@ import pygame
 class Game:
 
     def __init__(self):
+        # Define game status
+        self.is_playing = False
         # Init group for player only
         self.all_players = pygame.sprite.Group()
         # Init sprite player for game
@@ -17,10 +19,55 @@ class Game:
         self.pressed = {}
         # Definition new group of monsters
         self.all_mummy = pygame.sprite.Group()
-        # Spawn monster
-        self.spawn_monster()
         # Variable fot last spawn
         self.last_spawn = 0
+
+    def start_game(self):
+        # Start game
+        self.is_playing = True
+        # Spawn monster
+        self.spawn_monster()
+
+    def game_over(self):
+        self.all_mummy = pygame.sprite.Group()
+        self.player.all_bullet = pygame.sprite.Group()
+        self.player.health = self.player.max_health
+        self.player.bar_color = self.player.default_bar_color
+        self.player.rect = self.player.default_rect
+        self.player.score = 0
+        self.pressed = {}
+        self.is_playing = False
+
+    def update(self, screen):
+        # Apply player sprite in game
+        screen.blit(self.player.image, self.player.rect)
+        self.player.update_health_bar(screen)
+
+        # Apply monsters sprite in game
+        self.all_mummy.draw(screen)
+
+        # Get all bullet and move it
+        for bullets in self.player.all_bullet:
+            bullets.move()
+
+        # Get all monsters sprite in game
+        for monster in self.all_mummy:
+            monster.forward()
+            monster.update_health_bar(screen)
+
+        # Apply bullet
+        self.player.all_bullet.draw(screen)
+
+        # Check player direction
+        if self.pressed.get(pygame.K_RIGHT) and self.pressed.get(pygame.K_LEFT):
+            self.player.nothing_move()
+        elif self.pressed.get(pygame.K_RIGHT) and self.player.rect.x + (
+                self.player.rect.width - 20) < screen.get_width():
+            self.player.move_right()
+            lastDir = "Right"
+        elif self.pressed.get(pygame.K_LEFT) and self.player.rect.x > -20:
+            lastDir = "Left"
+            self.player.move_left()
 
     def check_score(self):
         if 15 <= self.player.score <= 16:
