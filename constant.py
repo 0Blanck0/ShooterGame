@@ -17,5 +17,11 @@ bullet_image_sprite = pygame.image.load('assets/projectile.png')
 mummy_image_sprite = pygame.image.load('assets/mummy.png')
 
 rotate_image_angle_bullet = 180
+
+# Mobs variables
+# - Mummy
 default_mummy_posX = 1000
-default_mummy_posY = screen_height - (265 - (Player(game).rect.width/4))
+default_mummy_posY = screen_height - (265 - (Player(game).rect.width / 4))
+default_mummy_health = 100
+default_mummy_attack = 0.1
+default_mummy_speed = 0.5

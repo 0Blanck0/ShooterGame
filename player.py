@@ -105,12 +105,10 @@ class Bullet(pygame.sprite.Sprite):
         self.player.all_bullet.remove(self)
 
     def rotate(self):
-        # Rotate object function
         self.angle = constant.rotate_image_angle_bullet
         self.image = pygame.transform.rotate(self.origin_image, self.angle)
 
     def move(self):
-        # Move bullet
         self.rect.x += self.speed
         # It's outside the screen destroy it
         if self.rect.x > constant.screen_width or self.rect.x < -50:

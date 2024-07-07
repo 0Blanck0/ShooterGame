@@ -59,7 +59,7 @@ while running:
         elif event.type == pygame.KEYDOWN:
             # Save actual press key
             game_var.pressed[event.key] = True
-            # Fire ball in press space
+            # Fireball in press space
             if event.key == pygame.K_SPACE:
                 game_var.player.fire(lastDir)
         # Disable press key

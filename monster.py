@@ -8,22 +8,15 @@ class Monster(pygame.sprite.Sprite):
     def __init__(self, game):
         super().__init__()
         self.game = game
-        # Default health point of mummy
-        self.health = 100
-        self.max_health = 100
-        # Default attack point of mummy
-        self.attack = 0.1
-        # Default kill point
+        self.health = constant.default_mummy_health
+        self.max_health = constant.default_mummy_health
+        self.attack = constant.default_mummy_attack
         self.kill_point = 2 + random.randint(0, 2)
-        # Default mummy speed
-        self.speed = 1 + random.randint(1, 3)
-        # image for sprite of mummy
+        self.speed = constant.default_mummy_speed + random.uniform(0.1, 0.3)
         self.image = constant.mummy_image_sprite
-        # Get and set position of mummy
         self.rect = self.image.get_rect()
         self.rect.x = constant.default_mummy_posX + random.randint(0, 300)
         self.rect.y = constant.default_mummy_posY
-        # Define random number
         self.random_nb = random.randint(0, 5)
 
     def damage(self, amount, player, knowback):
