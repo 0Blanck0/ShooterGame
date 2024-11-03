@@ -11,15 +11,13 @@ banner = constant.banner_default
 banner = pygame.transform.scale(banner, (500, 500))
 banner_rect = banner.get_rect()
 
-lastDir = "Right"
 running = True
-
 pygame.init()
 
 # Generate screen of game
-
 pygame.display.set_caption(constant.game_name)
 screen = pygame.display.set_mode((screen_width, screen_height))
+font = pygame.font.SysFont("Arial", 30)
 
 banner_rect.x = math.ceil(screen.get_width() / 4)
 banner_rect.y = math.ceil(screen.get_height() / 4 - 100)
@@ -34,12 +32,14 @@ play_button_rect.y = math.ceil(screen.get_height() / 1.6)
 game_var = game.Game()
 
 while running:
-
     # Apply background to game
     screen.blit(background, (0, -200))
 
     # Start game if is_playing is true
     if game_var.is_playing:
+        score = f'Score: {game_var.player.score}'
+        img = font.render(score, True, constant.WHITE)
+        screen.blit(img, (20, 20))
         game_var.update(screen)
     else:
         screen.blit(play_button, play_button_rect)
@@ -61,7 +61,7 @@ while running:
             game_var.pressed[event.key] = True
             # Fireball in press space
             if event.key == pygame.K_SPACE:
-                game_var.player.fire(lastDir)
+                game_var.player.fire()
         # Disable press key
         elif event.type == pygame.KEYUP:
             game_var.pressed[event.key] = False
