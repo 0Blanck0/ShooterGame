@@ -1,5 +1,7 @@
 # ShooterGame
 
+/!\ This project is an old project /!\
+
 **A small Python shooter game** built with an **OOP approach**. Inspired by Graven’s tutorial (link below).
 
 ---
